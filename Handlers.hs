@@ -4,7 +4,13 @@
 
 -- A library for effect handlers that provides a faithful
 -- implementation of lambda_eff keeping track of effects and enforcing
--- linearity usting type unequality constraints.
+-- linearity using type unequality constraints.
+
+-- See the draft paper:
+--
+--   http://homepages.inf.ed.ac.uk/slindley/papers/handlers.pdf
+--
+-- for further details.
 
 {-# LANGUAGE GADTs, TypeFamilies,
     MultiParamTypeClasses,FlexibleInstances,

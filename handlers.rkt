@@ -1,6 +1,12 @@
 ;; Effect handlers in Racket
 ;;
 ;; By Ohad Kammar, Sam Lindley and Nicolas Oury
+;;
+;; See the draft paper:
+;;
+;;   http://homepages.inf.ed.ac.uk/slindley/papers/handlers.pdf
+;;
+;; for further details.
 
 #lang racket
 
