@@ -56,8 +56,7 @@ chooseFood2 choose1 choose2 =
     return (form ++ " " ++ fruit)
 
 ----- standard monadic approach
-    
-    
+
 runProbProb :: IO String
 runProbProb = chooseFood2 (getStdRandom random) (getStdRandom random)
 

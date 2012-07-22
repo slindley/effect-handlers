@@ -1,12 +1,12 @@
-{-# LANGUAGE GADTs, TypeFamilies, NoMonomorphismRestriction,
-             FlexibleContexts, TypeOperators, ScopedTypeVariables #-}
-
 -- This example demonstrates that Oleg Kiselyov's iteratees are
 -- algebraic computations and enumerators are effect handlers. It is a
 -- transcription of the code from Section 3 of Oleg's FLOPS 2012
 -- paper, Iteratees:
 -- 
 --   http://okmij.org/ftp/Haskell/Iteratee/describe.pdf
+
+{-# LANGUAGE GADTs, TypeFamilies, NoMonomorphismRestriction,
+             FlexibleContexts, TypeOperators, ScopedTypeVariables #-}
 
 import Control.Monad
 import Handlers
@@ -47,6 +47,17 @@ eval s comp =
    :<: Empty,
    \x -> \s -> x)
    s
+
+eval' :: String -> I a -> a
+eval' s comp =
+  handle comp
+  (GetC |-> (\() k ->
+              case s of
+                ""    -> eval' "" $ return $ k Nothing
+                (c:t) -> eval' t  $ return $ k (Just c))
+   :<: Empty,
+   id)
+
 
 getlines :: (GetC `In` e) => Comp e [String]
 getlines = loop []

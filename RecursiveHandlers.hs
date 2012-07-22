@@ -1,23 +1,55 @@
--- Effect handlers for Haskell
---
--- By Ohad Kammar, Sam Lindley and Nicolas Oury
+------ Recursive effect handlers -----
 
--- A library for effect handlers that provides a faithful
--- implementation of lambda_eff keeping track of effects and enforcing
--- linearity using type unequality constraints.
+-- This is an implementation of a variant of handlers in which
+-- continuation applications inside an operation clause are *not*
+-- wrapped in the handler to which the operation clause belongs. I
+-- call them recursive handlers, because for most use-cases I am aware
+-- of they require a handler function to be explicitly invoked
+-- recursively.
+--
+-- Standard effect handlers, in contrast, build in a particular kind
+-- of recursion in that continuation applications inside an operation
+-- clause are automatically wrapped in the handler.
+--
+-- Conor McBride's Frank implements recursive handlers:
+--
+--   http://hackage.haskell.org/package/Frank
+--
+-- Recursive handlers are convenient for threading state through a
+-- computation: the state is encoded as a parameter to the handler.
+--
+-- Standard handlers are often more convenient in the absence of such
+-- state, as it is not necessary to explicitly handle continuation
+-- applications.
+--
+-- Recursive handlers are to control0/prompt0 as effect handlers are
+-- to shift0/reset0.
+--
+-- See Ken Shan's paper 'A static simulation of dynamic delimited control':
+--
+--   http://www.cs.rutgers.edu/~ccshan/recur/recur-hosc-final.pdf
+--
+-- and Oleg Kiselyov's 'How to remove a dynamic prompt: static and
+-- dynamic delimited continuation operators are equally expressible':
+--
+--   http://www.cs.indiana.edu/pub/techreports/TR611.pdf
+--
+-- It might be interesting to define versions of handlers
+-- corresponding to the shift/reset and control/prompt continuation
+-- operators. It isn't yet clear to me whether or not they would be
+-- useful. It would seem to amount to interpretting an algebraic
+-- computation as another computation with the same effects - the
+-- handler would automatically be wrapped around the body of all of
+-- its operation clauses.
+--
 
--- See the draft paper:
---
---   http://homepages.inf.ed.ac.uk/slindley/papers/handlers.pdf
---
--- for further details.
 
 {-# LANGUAGE GADTs, TypeFamilies,
-    MultiParamTypeClasses,FlexibleInstances,
+    MultiParamTypeClasses, FlexibleInstances,
     OverlappingInstances, FlexibleContexts,
     TypeOperators #-}
 
-module Handlers where
+module RecursiveHandlers where
 
 import TypeNeq ((:=/=:))
 
@@ -87,38 +119,37 @@ applyOp m p = App makeWitness m p return
 -- the first component of OpClause is redundant
 -- but it eases type inference and makes the connection
 -- with the operational semantics blindingly obvious
-type OpClause op a = (op, OpAbs op a)
+type OpClause op a b = (op, OpAbs op a b)
 type RetClause a b = a -> b
+ 
+type OpAbs op a b = Param op -> (Return op -> a) -> b
 
-type OpAbs op a = Param op -> (Return op -> a) -> a
-
-(|->) :: Op op => op -> OpAbs op a -> OpClause op a
+(|->) :: op -> OpAbs op a b -> OpClause op a b
 (|->) = (,)
 infix 2 |-> 
 
 infixr 1 :<:
 -- An op handler represents a collection of operation clauses.
-data OpHandler e a where
-  Empty :: OpHandler () a
-  (:<:) :: (op `NotIn` e) => OpClause op a -> OpHandler e a -> OpHandler (op, e) a
+data OpHandler e a b where
+  Empty :: OpHandler () a b
+  (:<:) :: (op `NotIn` e) => OpClause op a b -> OpHandler e a b -> OpHandler (op, e) a b
 
-type Handler a e b = (OpHandler e b, RetClause a b)
+type Handler a e b = (OpHandler e (Comp e a) b, RetClause a b)
 
 -- handleOp w p k h
 --
 --   handle the operation at the position in op handler h denoted by
---   the witness w with parameter p and continuation k
-handleOp :: Witness op e -> OpHandler e a -> OpAbs op a
+----   the witness w with parameter p and continuation k
+handleOp :: Witness op e -> OpHandler e a b -> OpAbs op a b
 handleOp Here      ((_, f) :<: _) = f
-handleOp (There w) (_ :<: h) = handleOp w h
+handleOp (There w) (_ :<: h)      = handleOp w h
 
 handle :: Comp e a -> Handler a e b -> b
 handle (Ret v)       (h, r) = r v
-handle (App w _ p k) (h, r) = handleOp w h p k'
-  where k' v = handle (k v) (h, r)
+handle (App w _ p k) (h, r) = handleOp w h p k
 
 -- an operation clause that throws op
-throw :: (op `In` e) => op -> OpClause op (Comp e a)
+throw :: (op `In` e) => op -> OpClause op (Comp e a) (Comp e a)
 throw m = (m, App makeWitness m)
 
 infixr 1 -:<:
@@ -128,6 +159,7 @@ infixr 1 -:<:
 --   handler
 --
 -- (op is a singleton type and m is its instance)
-(-:<:) :: (op `NotIn` e, op `In` e') =>
-            op -> OpHandler e (Comp e' a) -> OpHandler (op, e) (Comp e' a)
+(-:<:) :: (op `NotIn` e, op `NotIn` e') =>
+            op -> OpHandler e       (Comp (op, e') a) (Comp (op, e') a)
+               -> OpHandler (op, e) (Comp (op, e') a) (Comp (op, e') a)
 m -:<: h = throw m :<: h

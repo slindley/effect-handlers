@@ -1,9 +1,9 @@
 -- The subtraction game (a variant of the game of nim).
 --
--- A game begins with n sticks on the table. I take the first turn. I
--- take between one and three sticks, then it is your turn, and you
--- take between one and three sticks. We alternate turns until we run
--- out of sticks. The winner is the player who takes the last stick.
+-- A game begins with n sticks on the table. I go first. I take
+-- between one and three sticks, then it is your turn, and you take
+-- between one and three sticks. We alternate turns until we run out
+-- of sticks. The winner is the player who takes the last stick.
 
 {-# LANGUAGE TypeFamilies, NoMonomorphismRestriction,
              FlexibleContexts, TypeOperators #-}

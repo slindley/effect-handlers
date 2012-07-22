@@ -5,6 +5,7 @@
 
 import Handlers
 
+--- shift/reset
 data Shift r a e = Shift
 instance Op (Shift r a e) where
   type Param (Shift r a e) = (a -> r) -> Comp (Shift r a e, e) r
@@ -24,6 +25,7 @@ resetH h c = handle c (Shift |-> (\p k -> resetH h (p k)) :<: h, id)
 -- around the body, it is necessary to add an additional effect
 -- parameter to Shift.
 
+--- shift0/reset0
 data Shift0 r a = Shift0
 instance Op (Shift0 r a) where
   type Param (Shift0 r a) = (a -> r) -> r
@@ -37,4 +39,3 @@ reset0 = reset0H Empty
 
 reset0H :: (Shift0 r a `NotIn` e) => OpHandler e r -> Comp (Shift0 r a, e) r -> r
 reset0H h c = handle c (Shift0 |-> (\p k -> p k) :<: h, id)
-
