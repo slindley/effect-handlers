@@ -1,6 +1,6 @@
 -- Iteratees using recursive effect handlers. This gives a more direct
--- translation of Oleg's code than the version that uses standard
--- effect handlers (Iteratees.hs).
+-- translation of Oleg Kiselyov's code than the version that uses
+-- standard effect handlers (Iteratees.hs).
 
 {-# LANGUAGE GADTs, TypeFamilies, NoMonomorphismRestriction,
              FlexibleContexts, TypeOperators, ScopedTypeVariables #-}

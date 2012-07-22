@@ -34,8 +34,8 @@ getline = loop ""
 -- handler: the return type of the handler is String -> a.
 --
 -- Could we give a more direct translation of Oleg's code by working
--- out how to represent control0-style handlers in terms of
--- shift0-style handlers?
+-- out how to represent recursive handlers in terms of standard
+-- handlers?
 eval :: String -> I a -> a
 eval s comp =
   handle comp
@@ -47,17 +47,6 @@ eval s comp =
    :<: Empty,
    \x -> \s -> x)
    s
-
-eval' :: String -> I a -> a
-eval' s comp =
-  handle comp
-  (GetC |-> (\() k ->
-              case s of
-                ""    -> eval' "" $ return $ k Nothing
-                (c:t) -> eval' t  $ return $ k (Just c))
-   :<: Empty,
-   id)
-
 
 getlines :: (GetC `In` e) => Comp e [String]
 getlines = loop []
