@@ -1,4 +1,4 @@
------- Recursive effect handlers -----
+----- Recursive effect handlers -----
 
 -- This is an implementation of a variant of handlers in which
 -- continuation applications inside an operation clause are *not*
