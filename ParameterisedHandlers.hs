@@ -6,9 +6,12 @@
 -- the parameter to be varied when handling operations in the
 -- continuation.
 --
--- Parameterised effect handlers are very similar in use to recursive
+-- Parameterised effect handlers are similar in use to recursive
 -- effect handlers. It is straightforward to simulate a parameterised
--- effect handler with a recursive effect handler and vice-versa.
+-- effect handler with a recursive effect handler. It is not clear
+-- that the opposite translation is possible, as recursive handlers
+-- need not re-handle continuation applications (witness
+-- control/prompt).
 --
 -- Clearly standard effect handlers can be simulated with
 -- parameterised effect handlers by setting the parameter to be unit.
