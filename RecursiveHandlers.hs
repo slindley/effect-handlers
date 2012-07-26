@@ -1,3 +1,11 @@
+-- REALLY BAD NAME ('recursive handlers'): these things *are not*
+-- recursive, which is exactly why typical instances make use of
+-- explicit recursion. Non-recursive handlers would be an equally bad
+-- name, as typical instances make use of recursion (a 'recursive
+-- non-recursive handler' would be very confusing!). Perhaps we should
+-- call them McBride handlers as they correspond to the handlers in
+-- Conor McBride's Frank programming language?
+
 ----- Recursive effect handlers -----
 
 -- This is an implementation of a variant of handlers in which
