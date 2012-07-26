@@ -1,4 +1,4 @@
-effect-handlers
+Effect handlers
 ===============
 
 Effect handler libraries.
