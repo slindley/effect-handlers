@@ -1,5 +1,5 @@
 (*
- Effect handlers for Haskell
+ Effect handlers for SML
 
  By Ohad Kammar, Sam Lindley and Nicolas Oury
 
