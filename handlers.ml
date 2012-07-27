@@ -24,13 +24,20 @@ sig
   val (|->) : ('p,'r) op -> ('p -> ('r -> 'a) -> 'a) -> 'a clause
 
   val mcbride : ('p,'r) op -> ('p -> ('r -> 'a) -> 'a) -> 'a clause
-  val local : ('p,'r) op -> ('p -> 'a) -> 'a clause
+  val local : ('p,'r) op -> ('p -> 'r) -> 'a clause
   val escape : ('p,'r) op -> ('p -> 'a) -> 'a clause
 
   val handle : (unit -> 'a) -> ('a, 'b) handler -> 'b
+  val handle_flip : ('a, 'b) handler -> (unit -> 'a) -> 'b
 
-  (* val stack_size : unit -> int *)
+  val stack_size : unit -> int
 end
+
+open Delimcc
+
+let control0 p f = take_subcont p (fun sk () ->
+  f (fun c -> push_subcont sk (fun () -> c)))
+
 
 module Eff : EFF =
 struct
@@ -43,28 +50,36 @@ struct
      clause with the current delimited continuation. *)
   type effector = {effector : 'p 'r.('p, 'r) op -> 'p -> 'r}
 
-  type 'a clause = {clause : 'p 'r.'a prompt -> effector -> ('p, 'r) op -> ('p -> 'r) option}
+  type 'a clause = {clause : 'p 'r.(unit -> 'a) prompt -> effector -> ('p, 'r) op -> ('p -> 'r) option}
   type ('a, 'b) return_clause = 'a -> 'b
   type ('a, 'b) handler = 'b clause list * ('a, 'b) return_clause
 
   (* the stack of effectors represents the stack of handlers *)
   let effector_stack = ref []
 
-  (* let stack_size () = List.length !effector_stack *)
+  let stack_size () = List.length !effector_stack
 
   let push e = effector_stack := (e :: !effector_stack)
   let pop () =
     match !effector_stack with
       | []    -> failwith "unhandled operation"
-      | e::es -> effector_stack := es; e
+      | e::es -> effector_stack := es
+  let peek () =
+    match !effector_stack with
+      | []    -> None
+      | e::es -> Some e
 
-  let new_op () =
+  let new_op_with_default default =
     let rec me p =
       (* the effector at the top of the stack handles this
          operation *)
-      (pop ()).effector me p
+      match peek() with
+        | None          -> default p
+        | Some effector -> effector.effector me p
     in
       me
+
+  let new_op () = new_op_with_default (fun _ -> failwith "unhandled operation")
         
   (* Obj.magic is used to coerce quantified types to their concrete
      representations. Correctness is guaranteed by pointer equality on
@@ -75,44 +90,23 @@ struct
       if op == Obj.magic op' then
         Some (fun p ->
           shift0 prompt
-            (fun k ->
+            (fun k () -> 
               body (Obj.magic p)
                 (fun x ->
-                  (* push the effector back on the stack to handler
-                     further operation applications in the
-                     continuation *)
                   push effector;
-                  Obj.magic k x)))
+                  let result = Obj.magic k x () in
+                    pop (); result)))
       else
         None}
-
-
-  let rec dummy_effector =
-    {effector =
-        fun op p ->
-          let result = op p in
-                    (* push this effector back on the stack in order
-                       to correctly handle any operations in the
-                       continuation *)
-            push dummy_effector;
-            result}
-
-  let control0 p f = take_subcont p (fun sk () ->
-    f (fun c -> push_subcont sk (fun () -> c)))
 
   let mcbride op body =
     {clause = fun prompt effector op' ->
       if op == Obj.magic op' then
         Some (fun p ->
           control0 prompt
-            (fun k ->
+            (fun k () -> 
               body (Obj.magic p)
-                (fun x ->
-                  (* push the effector back on the stack to handler
-                     further operation applications in the
-                     continuation *)
-                  push dummy_effector;
-                  Obj.magic k x)))
+                (fun x -> Obj.magic k x ())))
       else
         None}
 
@@ -120,12 +114,7 @@ struct
     {clause = fun prompt effector op' ->
       if op == Obj.magic op' then
         Some
-          (fun p ->
-            (* push the effector back on the stack to handler
-               further operation applications in the
-               continuation *)
-            push effector;
-            Obj.magic (body (Obj.magic p)))
+          (fun p -> Obj.magic (body (Obj.magic p)))
       else
         None}
 
@@ -134,7 +123,7 @@ struct
       if op == Obj.magic op' then
         Some
           (fun p ->
-            abort_thunk prompt (fun () -> body (Obj.magic p)))
+            abort prompt (fun () -> body (Obj.magic p)))
       else
         None}
 
@@ -168,22 +157,22 @@ struct
     in
       effector
 
-  let handle m (op_clauses, return_clause) =
+  let handle_flip (op_clauses, return_clause) =
     let prompt = new_prompt () in
     let effector = effector_of_op_clauses prompt op_clauses in
-      push effector;
-      push_prompt prompt
-        (fun () ->
-          let result =  m () in
-          (* Note that the following pop () appears in the
-             continuation, so will be executed every time a captured
-             delimited continuation is invoked. Symmetrically, each
-             time a continuation is invoked the current effector is
-             pushed back onto the stack. *)
-          let _ = pop () in
-            return_clause result)
-end 
+      fun m ->      
+        push effector;
+        let thunk =
+          push_prompt prompt
+            (fun () ->
+              let result = m () in
+                fun () -> return_clause result)
+        in
+          pop (); thunk ()
 
+  let handle m h = handle_flip h m
+end 
+   
 open Eff
 
 let get : (unit, int) op = new_op ()
@@ -216,6 +205,36 @@ let fast_failure m =
 
 let rec mcbride_state s m =
   handle m
-    ([local   get (fun ()  -> s);
-      mcbride put (fun s k -> mcbride_state s k)],
+(*    ([local   get (fun ()  -> s); *)
+    ([mcbride get (fun () k -> mcbride_state s (fun () -> k s));
+      mcbride put (fun s k  -> mcbride_state s k)],
      fun x -> x)
+
+let stop = new_op ()
+
+
+let rec stupid n =
+handle (fun () -> if n = 0 then stop () else n-1) 
+  ([escape stop (fun () -> ())],
+   (fun n -> stupid n))
+
+let rec count : unit -> unit = fun () ->
+  let n = get() in
+    if n = 0 then ()
+    else (put (n-1); count())
+
+let rec repeat n =
+  if n = 0 then ()
+  else (let x = mcbride_state 42 get in repeat (n-1))
+
+(* let rec gobble = *)
+(*     fun n ->  *)
+(*       if n = 0 then () *)
+(*       else *)
+(*         let prompt = Delimcc.new_prompt () in           *)
+(*           Delimcc.push_prompt *)
+(*             prompt *)
+(*             (fun () -> control0 prompt (fun k -> k ()); gobble (n-1)) *)
+
+(* let _ = mcbride_state 10000 count *)
+
