@@ -28,20 +28,16 @@ sig
   val escape : ('p,'r) op -> ('p -> 'a) -> 'a clause
 
   val handle : (unit -> 'a) -> ('a, 'b) handler -> 'b
-  val handle_flip : ('a, 'b) handler -> (unit -> 'a) -> 'b
 
-  val stack_size : unit -> int
+(*  val stack_size : unit -> int *)
 end
-
-open Delimcc
-
-let control0 p f = take_subcont p (fun sk () ->
-  f (fun c -> push_subcont sk (fun () -> c)))
-
 
 module Eff : EFF =
 struct
   open Delimcc
+
+  let control0 p f = take_subcont p (fun sk () ->
+    f (fun c -> push_subcont sk (fun () -> c)))
 
   type ('p, 'r) op = 'p -> 'r
 
@@ -57,7 +53,7 @@ struct
   (* the stack of effectors represents the stack of handlers *)
   let effector_stack = ref []
 
-  let stack_size () = List.length !effector_stack
+  (* let stack_size () = List.length !effector_stack *)
 
   let push e = effector_stack := (e :: !effector_stack)
   let pop () =
@@ -99,6 +95,20 @@ struct
       else
         None}
 
+  (* McBride clauses are implemented with control0 instead of shift0.
+     They correspond with Conor McBride's version of handlers in
+     Frank. The key difference between McBride clauses and standard
+     clauses is that the continuation is not automatically re-handled
+     by a McBride clause. This functionality can be used to implement
+     parameterised handlers. It can also be used to give
+     implementations of prompt and prompt0 as handlers.
+
+     Our current implementation of McBride clauses seems to have a
+     severe memory leak.
+
+     Perhaps parameterised handlers are easier to implement more
+     efficiently and offer most of the benefits of McBride
+     handlers. *)
   let mcbride op body =
     {clause = fun prompt effector op' ->
       if op == Obj.magic op' then
@@ -110,6 +120,8 @@ struct
       else
         None}
 
+  (* A local clause can be used as an optimisation for direct-style
+     operations that do not need to manipulate the continuation. *)
   let local op body =
     {clause = fun prompt effector op' ->
       if op == Obj.magic op' then
@@ -118,6 +130,8 @@ struct
       else
         None}
 
+  (* An escape clause can be used as an optimisation for aborting
+     operations (such as exceptions) that discard the continuation. *)
   let escape op body =
     {clause = fun prompt effector op' ->
       if op == Obj.magic op' then
@@ -157,20 +171,17 @@ struct
     in
       effector
 
-  let handle_flip (op_clauses, return_clause) =
+  let handle m (op_clauses, return_clause) =
     let prompt = new_prompt () in
     let effector = effector_of_op_clauses prompt op_clauses in
-      fun m ->      
-        push effector;
-        let thunk =
-          push_prompt prompt
-            (fun () ->
-              let result = m () in
-                fun () -> return_clause result)
-        in
-          pop (); thunk ()
-
-  let handle m h = handle_flip h m
+      push effector;
+      let thunk =
+        push_prompt prompt
+          (fun () ->
+            let result = m () in
+              fun () -> return_clause result)
+      in
+        pop (); thunk ()
 end 
    
 open Eff
@@ -178,11 +189,18 @@ open Eff
 let get : (unit, int) op = new_op ()
 let put : (int, unit) op = new_op ()
 
-let state_handler s m =
+let handle_state s m =
   handle m
     ([get |-> (fun () k s -> k s s);
       put |-> (fun s  k _ -> k () s)],
      fun x s -> x) s
+
+let handle_state_local s m =
+  let r = ref s in
+    handle m
+      ([local get (fun () -> !r);
+        local put (fun s  -> r := s)],
+       fun x -> x)
 
 let choice : (unit, bool) op = new_op ()
 
@@ -205,13 +223,11 @@ let fast_failure m =
 
 let rec mcbride_state s m =
   handle m
-(*    ([local   get (fun ()  -> s); *)
-    ([mcbride get (fun () k -> mcbride_state s (fun () -> k s));
+    ([local   get (fun ()  -> s);
       mcbride put (fun s k  -> mcbride_state s k)],
      fun x -> x)
 
 let stop = new_op ()
-
 
 let rec stupid n =
 handle (fun () -> if n = 0 then stop () else n-1) 
@@ -226,15 +242,6 @@ let rec count : unit -> unit = fun () ->
 let rec repeat n =
   if n = 0 then ()
   else (let x = mcbride_state 42 get in repeat (n-1))
-
-(* let rec gobble = *)
-(*     fun n ->  *)
-(*       if n = 0 then () *)
-(*       else *)
-(*         let prompt = Delimcc.new_prompt () in           *)
-(*           Delimcc.push_prompt *)
-(*             prompt *)
-(*             (fun () -> control0 prompt (fun k -> k ()); gobble (n-1)) *)
 
 (* let _ = mcbride_state 10000 count *)
 
