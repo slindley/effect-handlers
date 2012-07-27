@@ -23,6 +23,10 @@ sig
 
   val (|->) : ('p,'r) op -> ('p -> ('r -> 'a) -> 'a) -> 'a clause
 
+  val mcbride : ('p,'r) op -> ('p -> ('r -> 'a) -> 'a) -> 'a clause
+  val local : ('p,'r) op -> ('p -> 'a) -> 'a clause
+  val escape : ('p,'r) op -> ('p -> 'a) -> 'a clause
+
   val handle : (unit -> 'a) -> ('a, 'b) handler -> 'b
 
   (* val stack_size : unit -> int *)
@@ -79,6 +83,58 @@ struct
                      continuation *)
                   push effector;
                   Obj.magic k x)))
+      else
+        None}
+
+
+  let rec dummy_effector =
+    {effector =
+        fun op p ->
+          let result = op p in
+                    (* push this effector back on the stack in order
+                       to correctly handle any operations in the
+                       continuation *)
+            push dummy_effector;
+            result}
+
+  let control0 p f = take_subcont p (fun sk () ->
+    f (fun c -> push_subcont sk (fun () -> c)))
+
+  let mcbride op body =
+    {clause = fun prompt effector op' ->
+      if op == Obj.magic op' then
+        Some (fun p ->
+          control0 prompt
+            (fun k ->
+              body (Obj.magic p)
+                (fun x ->
+                  (* push the effector back on the stack to handler
+                     further operation applications in the
+                     continuation *)
+                  push dummy_effector;
+                  Obj.magic k x)))
+      else
+        None}
+
+  let local op body =
+    {clause = fun prompt effector op' ->
+      if op == Obj.magic op' then
+        Some
+          (fun p ->
+            (* push the effector back on the stack to handler
+               further operation applications in the
+               continuation *)
+            push effector;
+            Obj.magic (body (Obj.magic p)))
+      else
+        None}
+
+  let escape op body =
+    {clause = fun prompt effector op' ->
+      if op == Obj.magic op' then
+        Some
+          (fun p ->
+            abort_thunk prompt (fun () -> body (Obj.magic p)))
       else
         None}
 
@@ -152,3 +208,14 @@ let failure m =
   handle m
     ([fail |-> (fun () k -> None)],
      fun x -> Some x)
+
+let fast_failure m =
+  handle m
+    ([escape fail (fun () -> None)],
+     fun x -> Some x)
+
+let rec mcbride_state s m =
+  handle m
+    ([local   get (fun ()  -> s);
+      mcbride put (fun s k -> mcbride_state s k)],
+     fun x -> x)
