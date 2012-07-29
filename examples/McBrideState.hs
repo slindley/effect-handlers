@@ -1,7 +1,7 @@
 -- state using McBride handlers
 
 {-# LANGUAGE TypeFamilies, NoMonomorphismRestriction,
-             FlexibleContexts, TypeOperators #-}
+             FlexibleContexts, TypeOperators, ScopedTypeVariables #-}
 
 import McBrideHandlers
 
@@ -32,4 +32,8 @@ handleStateWith h s comp =
    Put |-> (\s  k -> handleStateWith h s $ k ()) :<: h,
    return)
 
-
+count :: Comp (Get Int, (Put Int, ())) ()
+count =
+    do {(n :: Int) <- get ();
+        if n == 0 then return ()
+        else do {put (n-1); count}}
