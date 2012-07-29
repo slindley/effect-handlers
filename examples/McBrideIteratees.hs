@@ -1,4 +1,4 @@
--- Iteratees using recursive effect handlers. This gives a more direct
+-- Iteratees using McBride handlers. This gives a more direct
 -- translation of Oleg Kiselyov's code than the version that uses
 -- standard effect handlers (Iteratees.hs).
 
@@ -6,7 +6,7 @@
              FlexibleContexts, TypeOperators, ScopedTypeVariables #-}
 
 import Control.Monad
-import RecursiveHandlers
+import McBrideHandlers
 
 type LChar = Maybe Char
 

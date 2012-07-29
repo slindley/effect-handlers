@@ -34,7 +34,7 @@ getline = loop ""
 -- handler: the return type of the handler is String -> a.
 --
 -- Could we give a more direct translation of Oleg's code by working
--- out how to represent recursive handlers in terms of standard
+-- out how to represent McBride handlers in terms of standard
 -- handlers?
 eval :: String -> I a -> a
 eval s comp =

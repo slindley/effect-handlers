@@ -1,37 +1,28 @@
--- REALLY BAD NAME ('recursive handlers'): these things *are not*
--- recursive, which is exactly why typical instances make use of
--- explicit recursion. Non-recursive handlers would be an equally bad
--- name, as typical instances make use of recursion (a 'recursive
--- non-recursive handler' would be very confusing!). Perhaps we should
--- call them McBride handlers as they correspond to the handlers in
--- Conor McBride's Frank programming language?
-
------ Recursive effect handlers -----
+----- McBride handlers -----
 
 -- This is an implementation of a variant of handlers in which
 -- continuation applications inside an operation clause are *not*
--- wrapped in the handler to which the operation clause belongs. I
--- call them recursive handlers, because for most use-cases I am aware
--- of they require a handler function to be explicitly invoked
--- recursively.
+-- wrapped in the handler to which the operation clause belongs.
+
+-- For common use-cases, such as iteratees, they require the handler
+-- to be explicitly invoked recursively. Standard effect handlers, in
+-- contrast, build in a particular kind of recursion in that
+-- continuation applications inside an operation clause are
+-- automatically wrapped in the handler.
 --
--- Standard effect handlers, in contrast, build in a particular kind
--- of recursion in that continuation applications inside an operation
--- clause are automatically wrapped in the handler.
---
--- Conor McBride's Frank implements recursive handlers:
+-- Conor McBride's Frank implements McBride handlers:
 --
 --   http://hackage.haskell.org/package/Frank
 --
--- Recursive handlers are convenient for threading state through a
+-- McBride handlers are convenient for threading state through a
 -- computation: the state is encoded as a parameter to the handler.
 --
 -- Standard handlers are often more convenient in the absence of such
 -- state, as it is not necessary to explicitly handle continuation
 -- applications.
 --
--- Recursive handlers are to control0/prompt0 as effect handlers are
--- to shift0/reset0.
+-- McBride handlers are to control0/prompt0 as standard effect
+-- handlers are to shift0/reset0.
 --
 -- See Ken Shan's paper 'A static simulation of dynamic delimited control':
 --
@@ -49,15 +40,13 @@
 -- computation as another computation with the same effects - the
 -- handler would automatically be wrapped around the body of all of
 -- its operation clauses.
---
-
 
 {-# LANGUAGE GADTs, TypeFamilies,
     MultiParamTypeClasses, FlexibleInstances,
     OverlappingInstances, FlexibleContexts,
     TypeOperators #-}
 
-module RecursiveHandlers where
+module McBrideHandlers where
 
 import TypeNeq ((:=/=:))
 

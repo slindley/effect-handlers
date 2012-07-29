@@ -1,9 +1,9 @@
--- delimited continuations with recursive effect handlers
+-- delimited continuations with McBride handlers
 
 {-# LANGUAGE TypeFamilies, NoMonomorphismRestriction,
              FlexibleContexts, TypeOperators #-}
 
-import RecursiveHandlers
+import McBrideHandlers
 
 -- prompt0H does not require recursion, but promptH, shift0H, shiftH
 -- all do.

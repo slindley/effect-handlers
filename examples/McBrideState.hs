@@ -1,9 +1,9 @@
--- state using recursive handlers
+-- state using McBride handlers
 
 {-# LANGUAGE TypeFamilies, NoMonomorphismRestriction,
              FlexibleContexts, TypeOperators #-}
 
-import RecursiveHandlers
+import McBrideHandlers
 
 data Get s = Get
 instance Op (Get s) where
