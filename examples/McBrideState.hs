@@ -34,6 +34,6 @@ handleStateWith h s comp =
 
 count :: Comp (Get Int, (Put Int, ())) ()
 count =
-    do {(n :: Int) <- get ();
-        if n == 0 then return ()
+    do {n <- get ();
+        if n == (0 :: Int) then return ()
         else do {put (n-1); count}}

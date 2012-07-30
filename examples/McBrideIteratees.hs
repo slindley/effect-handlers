@@ -42,14 +42,22 @@ getlines = loop []
         check acc "" = return (reverse acc)
         check acc l  = loop (l:acc)
         
-en_str :: String -> I a -> I a
-en_str s comp =
+--en_str :: String -> I a -> I a
+en_str' s comp =
   handle comp
   (GetC |-> (\() k ->
               case s of
                 ""    -> comp
                 (c:t) -> en_str t $ k (Just c)) :<: Empty,
    return)
+
+
+en_str ""    comp = comp
+en_str (c:t) comp =
+  handle comp
+  (GetC |-> (\() k -> en_str t $ k (Just c)) :<: Empty,
+   return)
+
 
 run :: I a -> a
 run comp =
