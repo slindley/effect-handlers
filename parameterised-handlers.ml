@@ -166,6 +166,7 @@ struct
             | [] ->
                 (* reinvoke an unhandled operation - to be handled
                    by an outer handler *)
+                pop ();
                 let result = op p in
                   (* push this effector back on the stack in order
                      to correctly handle any operations in the

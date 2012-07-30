@@ -110,7 +110,7 @@ struct
      efficiently and offer most of the benefits of McBride
      handlers. *)
   let mcbride op body =
-    {clause = fun prompt effector op' ->
+    {clause = fun prompt _effector op' ->
       if op == Obj.magic op' then
         Some (fun p ->
           control0 prompt
@@ -123,7 +123,7 @@ struct
   (* A local clause can be used as an optimisation for direct-style
      operations that do not need to manipulate the continuation. *)
   let local op body =
-    {clause = fun prompt effector op' ->
+    {clause = fun prompt _effector op' ->
       if op == Obj.magic op' then
         Some
           (fun p -> Obj.magic (body (Obj.magic p)))
@@ -133,7 +133,7 @@ struct
   (* An escape clause can be used as an optimisation for aborting
      operations (such as exceptions) that discard the continuation. *)
   let escape op body =
-    {clause = fun prompt effector op' ->
+    {clause = fun prompt _effector op' ->
       if op == Obj.magic op' then
         Some
           (fun p ->
@@ -153,6 +153,7 @@ struct
                 | [] ->
                   (* reinvoke an unhandled operation - to be handled
                      by an outer handler *)
+                  pop ();
                   let result = op p in
                     (* push this effector back on the stack in order
                        to correctly handle any operations in the
@@ -224,7 +225,7 @@ let fast_failure m =
 let rec mcbride_state s m =
   handle m
     ([local   get (fun ()  -> s);
-      mcbride put (fun s k  -> mcbride_state s k)],
+      mcbride put (fun s k -> mcbride_state s k)],
      fun x -> x)
 
 let stop = new_op ()
