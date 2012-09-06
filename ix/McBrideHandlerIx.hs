@@ -10,8 +10,6 @@
 
 module Handlers where
 
-import GHC.Prim (Any)
-
 import Control.Exception (catch, IOException)
 import System.IO
 
@@ -77,7 +75,7 @@ applyOp :: (op `In` e) => op -> Param op i -> Comp e (Return op) i
 applyOp m p = App makeWitness m p returnIx
 
 -- We use the Plain newtype for representing non-dependent result
--- types.
+-- types. This is just an instance of the K combinator.
 newtype Plain (a :: *) (i :: k) = Plain {unPlain :: a}
 
 -- operation clause with a dependent result type
@@ -103,20 +101,20 @@ type OpAbsRaw op (m :: (k -> *) -> (k -> *)) a (b :: k -> *) (post :: k) =
 type OpAbsPlainResult op (m :: (k -> *) -> (k -> *)) a b (post :: k) =
   (forall (pre :: k).Param op pre -> (Return op :-> m (a := post)) -> b)
 
-type RetClause (post :: k) a b = (a := post) post -> b
+type RetClause a b = a -> b
 
 infixr 1 :<:
 -- An op handler represents a collection of operation clauses.
-data OpHandler e (m :: (k -> *) -> (k -> *)) a (b :: k -> *) (pre :: k) (post :: k) where
-  Empty :: OpHandler () m a b pre post
+data OpHandler e (m :: (k -> *) -> (k -> *)) a (b :: k -> *) (post :: k) where
+  Empty :: OpHandler () m a b post
   (:<:) :: (op `NotIn` e) =>
             OpClause op m a b (post :: k) ->
-              OpHandler e m a b pre post -> OpHandler (op, e) m a b pre post
+              OpHandler e m a b post -> OpHandler (op, e) m a b post
 
 type Handler a e (b :: k -> *) (pre :: k) (post :: k) =
-  (OpHandler e (Comp e) a b pre post, RetClause post a (b pre))
-type PlainHandler a e b (pre :: k) (post :: k) =
-  (OpHandler e (Comp e) a (Plain b) pre post, RetClause post a b)
+  (OpHandler e (Comp e) a b post, RetClause ((a := post) post) (b pre))
+type PlainHandler a e b (post :: k) =
+  (OpHandler e (Comp e) a (Plain b) post, RetClause ((a := post) post) b)
 
 
 -- handleOp w p k h
@@ -124,7 +122,7 @@ type PlainHandler a e b (pre :: k) (post :: k) =
 --   handle the operation at the position in op handler h denoted by
 --   the witness w with parameter p and continuation k
 handleOp :: Witness op e ->
-            OpHandler e m a b pre post ->
+            OpHandler e m a b post ->
             OpAbs op m a b post
 handleOp Here      ((_, f) :<: _) = f
 handleOp (There w) (_ :<: h)      = handleOp w h
@@ -136,16 +134,16 @@ handle (App w _ p k) (h, r) = unOpAbs (handleOp w h) p k
 -- If pre :=/=: post then the return clause cannot be defined nor
 -- invoked.
 nonReturningHandle :: (pre :=/=: post) =>
-                         Comp e (a := post) pre -> OpHandler e (Comp e) a b pre post -> b pre
+                         Comp e (a := post) pre -> OpHandler e (Comp e) a b post -> b pre
 nonReturningHandle m h = handle m (h, undefined)
 
 -- If the result is plain, i.e., non-dependent then this removes the
 -- dependent wrapper.
-handlePlainResult :: Comp e (a := post) pre -> PlainHandler a e b pre post -> b
+handlePlainResult :: Comp e (a := post) pre -> PlainHandler a e b post -> b
 handlePlainResult m (h, r) = unPlain (handle m (h, (\v -> Plain (r v))))
 
 nonReturningHandlePlainResult :: (pre :=/=: post) =>
-                                    Comp e (a := post) pre -> OpHandler e (Comp e) a (Plain b) pre post -> b
+                                    Comp e (a := post) pre -> OpHandler e (Comp e) a (Plain b) post -> b
 nonReturningHandlePlainResult m h = unPlain (nonReturningHandle m h)
 
 -- an operation clause that throws op
@@ -161,8 +159,8 @@ infixr 1 -:<:
 --
 -- (op is a singleton type and m is its instance)
 (-:<:) :: (op `NotIn` e, op `NotIn` e') =>
-           op -> OpHandler e       (Comp (op, e')) a (Comp (op, e') (a := post)) pre post
-              -> OpHandler (op, e) (Comp (op, e')) a (Comp (op, e') (a := post)) pre post
+           op -> OpHandler e       (Comp (op, e')) a (Comp (op, e') (a := post)) post
+              -> OpHandler (op, e) (Comp (op, e')) a (Comp (op, e') (a := post)) post
 m -:<: h = throw m :<: h
 
 -- Is is possible to prove that a clause is unreachable? Perhaps it
@@ -171,8 +169,8 @@ m -:<: h = throw m :<: h
 -- unreachable clause
 infixr 1 >:<:
 (>:<:) :: (op `NotIn` e) =>
-           op -> OpHandler e       m a b pre post
-              -> OpHandler (op, e) m a b pre post
+           op -> OpHandler e       m a b post
+              -> OpHandler (op, e) m a b post
 m >:<: h = (m |-> undefined) :<: h
 
 ----- Example: reading a file -----
