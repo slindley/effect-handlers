@@ -2,7 +2,7 @@
 
 {-# LANGUAGE TypeFamilies,
     MultiParamTypeClasses, FlexibleInstances,
-    TypeOperators, ScopedTypeVariables,
+    TypeOperators, ScopedTypeVariables, RankNTypes,
     NoMonomorphismRestriction #-}
 
 module OpenHandlers where
@@ -15,14 +15,14 @@ class Op op where
   type Return op :: *
 
 class Handler h where
-  type ReturnH h :: *
-  type InnerH h :: *
-  ret :: h -> InnerH h -> ReturnH h
+  type Result h :: *
+  type Inner h :: *
+  ret :: h -> Inner h -> Result h
 
 class (Op op, Handler h) => Handles h op where
-  clause :: op -> h -> Param op -> (Return op -> ReturnH h) -> ReturnH h
+  clause :: op -> h -> Param op -> (Return op -> Result h) -> Result h
 
-newtype Comp h a = Comp {unComp :: h -> (a -> ReturnH h) -> ReturnH h}
+data Comp h a = Comp {unComp :: h -> (a -> Result h) -> Result h}
 
 instance Monad (Comp h) where
   return v     = Comp (\_ f -> f v)
@@ -34,7 +34,7 @@ instance Functor (Comp e) where
 applyOp :: (h `Handles` op) => op -> Param op -> Comp h (Return op)
 applyOp m p = Comp (\h k -> clause m h p k)
 
-handle :: (Handler h) => Comp h (InnerH h) -> h -> ReturnH h
+handle :: (Handler h) => Comp h (Inner h) -> h -> Result h
 handle (Comp c) h = c h (ret h)
 
 
@@ -53,8 +53,8 @@ put = applyOp Put
 
 data StateHandler s a = StateHandler
 instance Handler (StateHandler s a) where
-  type ReturnH (StateHandler s a) = s -> a
-  type InnerH (StateHandler s a)  = a
+  type Result (StateHandler s a) = s -> a
+  type Inner (StateHandler s a)  = a
   ret _ x = \s -> x
 
 instance (StateHandler s a `Handles` Put s) where
@@ -71,8 +71,8 @@ count =
 
 data ForwardHandler h a = ForwardHandler
 instance Handler (ForwardHandler h a) where
-  type ReturnH (ForwardHandler h a) = Comp h a
-  type InnerH (ForwardHandler h a)  = a
+  type Result (ForwardHandler h a) = Comp h a
+  type Inner (ForwardHandler h a)  = a
   ret _ = return
 
 instance (h `Handles` op) => ForwardHandler h a `Handles` op where
@@ -91,8 +91,8 @@ choice = applyOp Choice ()
 
 data HandleAll h a = HandleAll
 instance Handler (HandleAll h a) where
-  type ReturnH (HandleAll h a) = Comp h [a]
-  type InnerH (HandleAll h a)  = a
+  type Result (HandleAll h a) = Comp h [a]
+  type Inner (HandleAll h a)  = a
   ret _ x = return [x]
 
 instance (HandleAll h a `Handles` Choice) where
