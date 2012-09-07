@@ -50,7 +50,7 @@ c =>= f = c ?>= knownState f
 ----- parameterised monads
 -- Every monad on indexed types gives rise to a parameterised monad
 -- over ordinary types.
-class PaMonad (m :: i -> i -> * -> *) where
+class PaMonad m where -- (m :: i -> i -> * -> *) where
   paReturn :: a -> m i i a
   paExtend :: (a -> m j k b) -> (m i j a  -> m i k b)
 
@@ -97,6 +97,8 @@ instance MonadIx Path where
   extendIx f (r :-: rs) = f r +-+ extendIx f rs
   extendIx f Nil        = Nil
 
+-- The unsafeCoerce is required because GHC makes things unnecessarily
+-- complicated by adding a special 'Any' type to every kind.
 splip :: forall (s :: (i,j) -> *) (t :: (i,j) -> *) .
            (forall i j . s '(i,j) -> t '(i,j)) -> s :-> t
 splip = unsafeCoerce
