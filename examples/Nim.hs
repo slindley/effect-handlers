@@ -20,12 +20,14 @@ data IChoose = IChoose
 instance Op IChoose where
   type Param IChoose = Int
   type Return IChoose = Int
+iChoose :: (IChoose `In` e) => Int -> Comp e Int
 iChoose = applyOp IChoose
 
 data UChoose = UChoose
 instance Op UChoose where
   type Param UChoose = Int
   type Return UChoose = Int
+uChoose :: (UChoose `In` e) => Int -> Comp e Int
 uChoose = applyOp UChoose
 
 data Player = Me | You
@@ -162,6 +164,7 @@ data Cheat = Cheat
 instance Op Cheat where
   type Param Cheat = (Player, Int) 
   type Return Cheat = Void
+cheat :: (Cheat `In` e) => (Player, Int) -> Comp e a
 cheat (p, m) = (applyOp Cheat (p, m)) >>= undefined
 
 -- a checked choice
@@ -172,11 +175,11 @@ checkChoice :: (IChoose `In` e, UChoose `In` e, Cheat `In` e) =>
                Player -> Int -> (Int -> Comp e a) -> Comp e a
 checkChoice player n k = 
   do
-    let ch =
+    let playerChoose =
           case player of
             Me  -> iChoose
             You -> uChoose
-    take <- ch n
+    take <- playerChoose n
     if take < 0 || 3 < take then cheat (player, take)
     else k take
 
