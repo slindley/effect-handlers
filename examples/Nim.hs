@@ -13,40 +13,38 @@ import Handlers
 
 -- Operations:
 --
---   ichoose n = m, if I choose m out of the remaining n sticks
---   uchoose n = m, if you choose m out of the remaining n sticks
-
-data IChoose = IChoose
-instance Op IChoose where
-  type Param IChoose = Int
-  type Return IChoose = Int
-iChoose = applyOp IChoose
-
-data UChoose = UChoose
-instance Op UChoose where
-  type Param UChoose = Int
-  type Return UChoose = Int
-uChoose = applyOp UChoose
+--   choose (player, n) = m, if player chooses m out of the remaining n sticks
 
 data Player = Me | You
   deriving (Show, Eq)
 
+-- The 'Move' operation represents a move by a player in the game. The
+-- parameter is a pair of the player and the number of sticks
+-- remaining. The return value is the number of sticks the player
+-- chooses to take.
+data Move = Move
+instance Op Move where
+  type Param Move = (Player, Int)
+  type Return Move = Int
+move :: (Move `In` e) => (Player, Int) -> Comp e Int
+move = applyOp Move
+
 -- a game parameterised by the number of starting sticks
-game :: (IChoose `In` e, UChoose `In` e) => Int -> Comp e Player
+game :: (Move `In` e) => Int -> Comp e Player
 game = myTurn
 
 myTurn n =
   if n == 0 then return You
   else
     do
-      take <- iChoose n
+      take <- move (Me, n)
       yourTurn (n-take)
       
 yourTurn n =
   if n == 0 then return Me
   else
     do
-      take <- uChoose n
+      take <- move (You, n)
       myTurn (n-take)
 
 -- Note that this implementation does not check that each player takes
@@ -62,7 +60,7 @@ perfect n k = k (max (n `mod` 4) 1)
 pp :: Monad m => Int -> m Player
 pp n =
   handle (game n)
-  (IChoose |-> perfect :<: UChoose |-> perfect :<: Empty,
+  (Move |-> (\(_, n) -> perfect n) :<: Empty,
    return)
 
 -- *Main> pp 3
@@ -79,7 +77,7 @@ validMoves n = filter (<= n) [1,2,3]
 -- a brute force strategy
 --
 -- Enumerate all the moves. If one of them leads to a win for player,
--- then choose it. Otherwise just take 1 stick.
+-- then move it. Otherwise just take 1 stick.
 bruteForce :: Monad m => Player -> Int -> (Int -> m Player) -> m Player
 bruteForce player n k =
   do
@@ -92,7 +90,10 @@ bruteForce player n k =
 bp :: Monad m => Int -> m Player
 bp n =
   handle (game n)
-  (IChoose |-> bruteForce Me :<: UChoose |-> perfect :<: Empty,
+  (Move |-> (\(player, n) ->
+                case player of
+                  Me  -> bruteForce Me n
+                  You -> perfect n) :<: Empty,
    return)
 
 -- bruteForce behaves just the same as the perfect strategy, except it
@@ -110,29 +111,28 @@ bp n =
 -- representing the possible moves of each player.
 
 -- a tree encoding possible moves
-data MoveTree = ITake [(Int, MoveTree)] | UTake [(Int, MoveTree)] | Winner Player
+data MoveTree = Take (Player, [(Int, MoveTree)]) | Winner Player
   deriving Show
 
 -- reify a move as part of a move tree
 reifyMove :: Monad m => Player -> Int -> (Int -> m MoveTree) -> m MoveTree
 reifyMove player n k =
   do
-    let play =
-          case player of
-            Me  -> ITake
-            You -> UTake
     l <- mapM k (validMoves n)
-    return $ play (zip [1..] l)
+    return $ Take (player, zip [1..] l)
     
 -- generate the complete move tree for a game starting with n sticks
 mm :: Monad m => Int -> m MoveTree
 mm n =
   handle (game n)
-  (IChoose |-> reifyMove Me :<: UChoose |-> reifyMove You :<: Empty,
+  (Move |-> (\(player, n) -> reifyMove player n) :<: Empty,
    \x -> return $ Winner x)
 
 -- *Main> mm 3
--- ITake [(1,UTake [(1,ITake [(1,Winner Me)]),(2,Winner You)]),(2,UTake [(1,Winner You)]),(3,Winner Me)]
+-- Take (Me, [(1, Take (You, [(1, Take (Me, [(1,Winner Me)])),
+--                            (2, Winner You)])),
+--            (2, Take (You, [(1,Winner You)])),
+--            (3, Winner Me)])
 
 -- generate the move tree for a game in which you play a perfect
 -- strategy
@@ -140,19 +140,23 @@ mp :: Monad m => Int -> m MoveTree
 mp n =
   handle
   (handle (game n)
-   (IChoose |-> reifyMove Me :<:
-    UChoose |-> (\n k ->
-                  do
-                    take <- uChoose n 
-                    tree <- k take
-                    return $ UTake [(take, tree)]) :<: Empty,
+   (Move |-> (\(player, n) k ->
+                 case player of
+                   Me -> reifyMove Me n k
+                   You ->
+                     do
+                       take <- move (You, n)
+                       tree <- k take
+                       return $ Take (You, [(take, tree)])) :<: Empty,
     \x -> return $ Winner x))
-  (UChoose |-> perfect :<: Empty,
+  (Move |-> (\(You, n) -> perfect n) :<: Empty,
    return)
 
 -- *Main> mp 3
--- ITake [(1,UTake [(2,Winner You)]),(2,UTake [(1,Winner You)]),(3,Winner Me)]
-
+-- Take (Me, [(1, Take (You, [(2, Winner You)])),
+--            (2, Take (You, [(1, Winner You)])),
+--            (3, Winner Me)])
+   
 -- an uninhabited type
 data Void
 
@@ -162,30 +166,27 @@ data Cheat = Cheat
 instance Op Cheat where
   type Param Cheat = (Player, Int) 
   type Return Cheat = Void
+cheat :: (Cheat `In` e) => (Player, Int) -> Comp e a
 cheat (p, m) = (applyOp Cheat (p, m)) >>= undefined
 
 -- a checked choice
 --
 -- If the player chooses a valid number of sticks, then the game
 -- continues. If not, then the cheat operation is invoked.
-checkChoice :: (IChoose `In` e, UChoose `In` e, Cheat `In` e) =>
+checkChoice :: (Move `In` e, Cheat `In` e) =>
                Player -> Int -> (Int -> Comp e a) -> Comp e a
-checkChoice player n k = 
+checkChoice player n k =
   do
-    let ch =
-          case player of
-            Me  -> iChoose
-            You -> uChoose
-    take <- ch n
+    take <- move (player, n)
     if take < 0 || 3 < take then cheat (player, take)
     else k take
 
 -- a game that checks for cheating
-checkedGame :: (IChoose `In` e, UChoose `In` e, Cheat `In` e) => Int -> Comp e Player
+checkedGame :: (Move `In` e, Cheat `In` e) => Int -> Comp e Player
 checkedGame n =
   handle
   (game n)
-  (IChoose |-> checkChoice Me :<: UChoose |-> checkChoice You :<: Empty,
+  (Move |-> (\(player, n) -> checkChoice player n) :<: Empty,
    return)
 
 -- a cheating strategy: take all of the sticks, no matter how many
@@ -196,7 +197,10 @@ cheater n k = k n
 -- (I always win)
 cp n =
   handle (game n)
-  (IChoose |-> cheater :<: UChoose |-> perfect :<: Empty,
+  (Move |-> (\(player, n) -> 
+                case player of
+                  Me -> cheater n 
+                  You -> perfect n) :<: Empty,
    return)
 
 -- *Main> cp 32
@@ -205,19 +209,19 @@ cp n =
 -- a game in which cheating leads to the game being abandoned, and the
 -- cheater is reported along with how many sticks they attempted to
 -- take
-cheaterEndingGame :: (IChoose `In` e, UChoose `In` e) => Int -> Comp e Player
+cheaterEndingGame :: (Move `In` e) => Int -> Comp e Player
 cheaterEndingGame n =
   handle (checkedGame n)
-  (IChoose -:<: UChoose -:<:
+  (Move -:<:
    Cheat |-> (\(p, n) _ -> error ("Cheater: " ++ show p ++ ", took: " ++ show n)) :<: Empty,
    return)
 
 -- a game in which if I cheat then you win immediately, and if you
 -- cheat then I win immediately
-cheaterLosingGame :: (IChoose `In` e, UChoose `In` e) => Int -> Comp e Player
+cheaterLosingGame :: (Move `In` e) => Int -> Comp e Player
 cheaterLosingGame n =
   handle (checkedGame n)
-  (IChoose -:<: UChoose -:<:
+  (Move -:<:
    Cheat |-> (\(p, n) _ -> 
                case p of
                  Me -> return You
@@ -230,7 +234,10 @@ cheaterLosingGame n =
 -- cheat.)
 cpEnding n =
   handle (cheaterEndingGame n)
-  (IChoose |-> cheater :<: UChoose |-> perfect :<: Empty,
+  (Move |-> (\(player, n) ->
+                case player of
+                  Me -> cheater n  
+                  You -> perfect n) :<: Empty,
    return)
 
 -- *Main> cpEnding 3
@@ -243,7 +250,10 @@ cpEnding n =
 -- (If n < 4 then I win, otherwise you win because I cheat.)
 cpLosing n =
   handle (cheaterLosingGame n)
-  (IChoose |-> cheater :<: UChoose |-> perfect :<: Empty,
+  (Move |-> (\(player, n) ->
+                case player of
+                  Me -> cheater n
+                  You -> perfect n) :<: Empty,
    return)
 
 -- *Main> cpLosing 3

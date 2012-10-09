@@ -50,7 +50,7 @@ c =>= f = c ?>= knownState f
 ----- parameterised monads
 -- Every monad on indexed types gives rise to a parameterised monad
 -- over ordinary types.
-class PaMonad m where -- (m :: i -> i -> * -> *) where
+class PaMonad (m :: w -> w -> * -> *) where
   paReturn :: a -> m i i a
   paExtend :: (a -> m j k b) -> (m i j a  -> m i k b)
 
@@ -67,9 +67,10 @@ extendP :: MonadIx m => (a -> Atkey m j k b) -> Atkey m i j a -> Atkey m i k b
 extendP f c = c =>= f
 -----
 
--- TODO: why does this type signature cause problems later?
---class FunctorIx m => ApplicativeP (m :: (i -> *) -> (i -> *)) where -- (m :: ({i} -> *) -> ({i} -> *)) where
-class FunctorIx m => ApplicativeP m where
+-- Note that the name of the kind variable (w) must be distinct from
+-- the names of the type variable (i) as the former is bound in the
+-- function definitions.
+class FunctorIx m => ApplicativeP (m :: (w -> *) -> (w -> *)) where
   pure  :: x -> Atkey m i i x
   (|*|) :: Atkey m i j (s -> t) -> Atkey m j k s -> Atkey m i k t
 
