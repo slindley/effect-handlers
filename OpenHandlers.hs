@@ -42,7 +42,7 @@ data Get s = Get
 instance Op (Get s) where
   type Param  (Get s) = ()
   type Return (Get s) = s
-get = applyOp Get
+get = applyOp Get ()
 
 data Put s = Put
 instance Op (Put s) where
@@ -64,7 +64,7 @@ instance (StateHandler s a `Handles` Get s) where
   clause _ _ _ k = (\s -> k s s)
 
 count =
-    do {n <- get ();
+    do {n <- get;
         if n == (0 :: Int) then return ()
         else do {put (n-1); count}}
 
@@ -107,7 +107,7 @@ instance (h `Handles` op) => HandleAll h a `Handles` op where
 chooseFood =
   do
     x <- choice
-    fruit <- if x then get() 
+    fruit <- if x then get 
              else return $ "orange"
     y <- choice
     let form = if y then "raw " else "cooked "
