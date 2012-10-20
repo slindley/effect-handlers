@@ -28,7 +28,7 @@ toInt :: Nat -> Int
 toInt n =
   handle n
   ((Step |-> \p k -> 1+k p) :<: Empty,
-   \_ -> 0)
+   \() -> 0)
 
 plus :: Nat -> Nat -> Nat
 plus m n = m >> n
