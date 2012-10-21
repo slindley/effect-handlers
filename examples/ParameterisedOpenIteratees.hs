@@ -10,15 +10,13 @@
     FlexibleContexts, TypeOperators, ScopedTypeVariables #-}
 
 import Control.Monad
-import ParameterisedOpenHandlers
+import OpenHandlers
 
 type LChar = Maybe Char
 
 data GetC = GetC
-instance Op GetC where
-  type Param GetC  = ()
-  type Return GetC = LChar
-getC = applyOp GetC ()
+type instance Return GetC = LChar
+getC = doOp GetC
 
 type I a = (h `Handles` GetC) => Comp h a
 
@@ -31,14 +29,11 @@ getline = loop ""
         check acc _                    = return (reverse acc)
 
 data EvalHandler a = EvalHandler String
-instance Handler (EvalHandler a) where
-  type Result (EvalHandler a) = a
-  type Inner (EvalHandler a) = a
-  ret _ x = x
+type instance Result (EvalHandler a) = a
 
 instance (EvalHandler a `Handles` GetC) where
-  clause _ (EvalHandler "")    () k = k (EvalHandler "") Nothing
-  clause _ (EvalHandler (c:t)) () k = k (EvalHandler t) (Just c)
+  clause (EvalHandler "")    GetC k = k (EvalHandler "") Nothing
+  clause (EvalHandler (c:t)) GetC k = k (EvalHandler t) (Just c)
 
 getlines :: (h `Handles` GetC) => Comp h [String]
 getlines = loop []
@@ -47,50 +42,41 @@ getlines = loop []
         check acc l  = loop (l:acc)
         
 data EnStrHandler h a = EnStrHandler String
-instance Handler (EnStrHandler h a) where
-  type Result (EnStrHandler h a) = Comp (EnStrHandler h a) a
-  type Inner (EnStrHandler h a) = a
-  ret _ x = return x
+type instance Result (EnStrHandler h a) = Comp (EnStrHandler h a) a
 
 instance (EnStrHandler h a `Handles` GetC) where
-  clause _ (EnStrHandler "")    () k = do {c <- getC; k (EnStrHandler "") c}
-  clause _ (EnStrHandler (c:t)) () k = k (EnStrHandler t) (Just c)
+  clause (EnStrHandler "")    GetC k = do {c <- getC; k (EnStrHandler "") c}
+  clause (EnStrHandler (c:t)) GetC k = k (EnStrHandler t) (Just c)
 
 instance (h `Handles` op) => (EnStrHandler h a `Handles` op) where
-  clause m h p k = Comp (\h' k' ->
-                          clause m h' p (\h'' x -> unComp (k h'' x) h' k'))
+    clause h op k = Comp (\h' k' ->
+                              clause h' op (\h'' x -> unComp (k h'' x) h' k'))
   
 -- RunHandler throws away any outstanding unhandled GetC applications
 data RunHandler h a = RunHandler String
-instance Handler (RunHandler h a) where
-  type Result (RunHandler h a) = Comp h a
-  type Inner (RunHandler h a) = a
-  ret _ x = return x
+type instance Result (RunHandler h a) = Comp h a
 
 instance (RunHandler h a `Handles` GetC) where
-  clause _ h () k = k h Nothing
+  clause h GetC k = k h Nothing
 
 instance (h `Handles` op) => (RunHandler h a `Handles` op) where
-  clause m h p k = Comp (\h' k' ->
-                          clause m h' p (\h'' x -> unComp (k h x) h' k'))
+  clause h op k = Comp (\h' k' ->
+                           clause h' op (\h'' x -> unComp (k h x) h' k'))
 
 data FlipHandler h a = (h `Handles` GetC) => FlipHandler (Bool, LChar, FlipHandler h a -> LChar -> Comp h a)
-instance (Handler (FlipHandler h a)) where
-  type Result (FlipHandler h a) = Comp h a
-  type Inner (FlipHandler h a) = a
-  ret _ x = return x
+type instance Result (FlipHandler h a) = Comp h a
 
 instance (FlipHandler h a `Handles` GetC) where
-  clause _ (FlipHandler (True,  c, kr)) () kl = do {kr (FlipHandler (False, c, kl)) c}
-  clause _ (FlipHandler (False, _, kl)) () kr = do {c <- getC; kl (FlipHandler (True, c, kr)) c}
+  clause (FlipHandler (True,  c, kr)) GetC kl = do {kr (FlipHandler (False, c, kl)) c}
+  clause (FlipHandler (False, _, kl)) GetC kr = do {c <- getC; kl (FlipHandler (True, c, kr)) c}
 
 instance (h `Handles` op) => (FlipHandler h a `Handles` op) where
-  clause m h p k = Comp (\h' k' ->
-                          clause m h' p (\h'' x -> unComp (k h x) h' k'))
+  clause h op k = Comp (\h' k' ->
+                            clause h' op (\h'' x -> unComp (k h x) h' k'))
 
 -- synchronise two iteratees
 (<|) :: I a -> I a -> I a
-l <| r = handle l (FlipHandler (True, Nothing, \h' Nothing -> handle r h'))
+l <| r = handle l (FlipHandler (True, Nothing, \h' Nothing -> handle r h' (\_ -> return))) (\_ -> return)
 
 -- Roughly, we get the following behaviour from the synchronised
 -- traces of (l <| r):
