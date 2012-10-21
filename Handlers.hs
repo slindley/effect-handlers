@@ -42,7 +42,7 @@ instance (op :=/=: op', op `NotIn` e) => op `NotIn` (op', e)
 -- a witness to the proof that op is in e
 data Witness op e where
   Here  :: Witness op (op, e)
-  There :: Witness op e -> Witness op (op', e)
+  There :: !(Witness op e) -> Witness op (op', e)
 
 -- We could implement this kind of hack to make error messages
 -- slightly more illuminating.

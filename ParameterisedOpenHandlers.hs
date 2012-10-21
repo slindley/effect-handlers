@@ -28,7 +28,7 @@ instance Monad (Comp h) where
   return v     = Comp (\h k -> k h v)
   Comp c >>= f = Comp (\h k -> c h (\h' x -> unComp (f x) h' k))
 
-instance Functor (Comp e) where
+instance Functor (Comp h) where
   fmap f c = c >>= return . f
 
 applyOp :: (h `Handles` op) => op -> Param op -> Comp h (Return op)
