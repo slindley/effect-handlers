@@ -5,7 +5,7 @@
 -- 
 --   http://okmij.org/ftp/Haskell/Iteratee/describe.pdf
 
-{-# LANGUAGE GADTs, TypeFamilies, NoMonomorphismRestriction, RankNTypes,
+{-# LANGUAGE GADTs, TypeFamilies, NoMonomorphismRestriction, RankNTypes, ImpredicativeTypes,
     MultiParamTypeClasses, FlexibleInstances, OverlappingInstances,
     FlexibleContexts, TypeOperators, ScopedTypeVariables #-}
 
@@ -35,6 +35,10 @@ instance (EvalHandler a `Handles` GetC) where
   clause (EvalHandler "")    GetC k = k (EvalHandler "") Nothing
   clause (EvalHandler (c:t)) GetC k = k (EvalHandler t) (Just c)
 
+eval :: String -> I a -> a
+eval s comp =
+    handle comp (EvalHandler s) (const id)
+
 getlines :: (h `Handles` GetC) => Comp h [String]
 getlines = loop []
   where loop acc = getline >>= check acc
@@ -42,16 +46,19 @@ getlines = loop []
         check acc l  = loop (l:acc)
         
 data EnStrHandler h a = EnStrHandler String
-type instance Result (EnStrHandler h a) = Comp (EnStrHandler h a) a
+type instance Result (EnStrHandler h a) = Comp h a
 
-instance (EnStrHandler h a `Handles` GetC) where
+instance (h `Handles` GetC) => (EnStrHandler h a `Handles` GetC) where
   clause (EnStrHandler "")    GetC k = do {c <- getC; k (EnStrHandler "") c}
   clause (EnStrHandler (c:t)) GetC k = k (EnStrHandler t) (Just c)
 
 instance (h `Handles` op) => (EnStrHandler h a `Handles` op) where
     clause h op k = Comp (\h' k' ->
-                              clause h' op (\h'' x -> unComp (k h'' x) h' k'))
-  
+                              clause h' op (\h'' x -> unComp (k h x) h' k'))
+
+en_str :: String -> I a -> I a
+en_str s comp = handle comp (EnStrHandler s) (const return)
+
 -- RunHandler throws away any outstanding unhandled GetC applications
 data RunHandler h a = RunHandler String
 type instance Result (RunHandler h a) = Comp h a
@@ -62,6 +69,9 @@ instance (RunHandler h a `Handles` GetC) where
 instance (h `Handles` op) => (RunHandler h a `Handles` op) where
   clause h op k = Comp (\h' k' ->
                            clause h' op (\h'' x -> unComp (k h x) h' k'))
+
+run :: String -> I a -> Comp h a
+run s comp = handle comp (RunHandler s) (const return)
 
 data FlipHandler h a = (h `Handles` GetC) => FlipHandler (Bool, LChar, FlipHandler h a -> LChar -> Comp h a)
 type instance Result (FlipHandler h a) = Comp h a
@@ -76,7 +86,7 @@ instance (h `Handles` op) => (FlipHandler h a `Handles` op) where
 
 -- synchronise two iteratees
 (<|) :: I a -> I a -> I a
-l <| r = handle l (FlipHandler (True, Nothing, \h' Nothing -> handle r h' (\_ -> return))) (\_ -> return)
+l <| r = handle l (FlipHandler (True, Nothing, \h' Nothing -> handle r h' (const return))) (const return)
 
 -- Roughly, we get the following behaviour from the synchronised
 -- traces of (l <| r):
