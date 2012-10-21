@@ -54,7 +54,7 @@ instance (h `Handles` GetC) => (EnStrHandler h a `Handles` GetC) where
 
 instance (h `Handles` op) => (EnStrHandler h a `Handles` op) where
     clause h op k = Comp (\h' k' ->
-                              clause h' op (\h'' x -> unComp (k h x) h' k'))
+                              clause h' op (\h'' x -> unComp (k h x) h'' k'))
 
 en_str :: String -> I a -> I a
 en_str s comp = handle comp (EnStrHandler s) (const return)
@@ -68,7 +68,7 @@ instance (RunHandler h a `Handles` GetC) where
 
 instance (h `Handles` op) => (RunHandler h a `Handles` op) where
   clause h op k = Comp (\h' k' ->
-                           clause h' op (\h'' x -> unComp (k h x) h' k'))
+                           clause h' op (\h'' x -> unComp (k h x) h'' k'))
 
 run :: String -> I a -> Comp h a
 run s comp = handle comp (RunHandler s) (const return)
@@ -82,7 +82,7 @@ instance (FlipHandler h a `Handles` GetC) where
 
 instance (h `Handles` op) => (FlipHandler h a `Handles` op) where
   clause h op k = Comp (\h' k' ->
-                            clause h' op (\h'' x -> unComp (k h x) h' k'))
+                            clause h' op (\h'' x -> unComp (k h x) h'' k'))
 
 -- synchronise two iteratees
 (<|) :: I a -> I a -> I a
