@@ -70,8 +70,8 @@ instance (h `Handles` op) => (RunHandler h a `Handles` op) where
   clause h op k = Comp (\h' k' ->
                            clause h' op (\h'' x -> unComp (k h x) h'' k'))
 
-run :: String -> I a -> Comp h a
-run s comp = handle comp (RunHandler s) (const return)
+run :: h -> Cont h a -> String -> I a -> Result h
+run h r s comp = handle (handle comp (RunHandler s) (const return)) h r
 
 data FlipHandler h a = (h `Handles` GetC) => FlipHandler (Bool, LChar, FlipHandler h a -> LChar -> Comp h a)
 type instance Result (FlipHandler h a) = Comp h a
