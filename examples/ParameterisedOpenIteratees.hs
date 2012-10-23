@@ -59,7 +59,7 @@ en_str :: String -> I a -> I a
 en_str s comp = handle comp (EnStrHandler s) (const return)
 
 -- RunHandler throws away any outstanding unhandled GetC applications
-data RunHandler h a = RunHandler String
+data RunHandler h a = RunHandler
 type instance Result (RunHandler h a) = Comp h a
 
 instance (RunHandler h a `Handles` GetC) where
@@ -68,8 +68,18 @@ instance (RunHandler h a `Handles` GetC) where
 instance (h `Handles` op) => (RunHandler h a `Handles` op) where
   clause h op k = doOp op >>= k h
 
-run :: String -> I a -> Comp h a
-run s comp = handle comp (RunHandler s) (const return)
+run :: I a -> Comp h a
+run comp = handle comp RunHandler (const return)
+
+-- like PureRunHandler but with no underlying handler
+data PureRunHandler a = PureRunHandler
+type instance Result (PureRunHandler a) = a
+
+instance (PureRunHandler a `Handles` GetC) where
+  clause h GetC k = k h Nothing
+  
+pureRun :: I a -> a
+pureRun comp = handle comp PureRunHandler (const id)
 
 data FlipHandler h a = (h `Handles` GetC) => FlipHandler (Bool, LChar, FlipHandler h a -> LChar -> Comp h a)
 type instance Result (FlipHandler h a) = Comp h a
@@ -138,7 +148,7 @@ countI c = count' 0
             Just c' -> count' (if c==c' then n+1 else n)
             
 countH :: Char -> String -> Int
-countH c s = eval s (countI c)
+countH c s = pureRun (en_str s (countI c))
 
 count :: Char -> String -> Int
 count c s = count' s 0
