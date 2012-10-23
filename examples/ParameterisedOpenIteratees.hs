@@ -7,7 +7,7 @@
 
 {-# LANGUAGE GADTs, TypeFamilies, NoMonomorphismRestriction, RankNTypes, ImpredicativeTypes,
     MultiParamTypeClasses, FlexibleInstances, OverlappingInstances,
-    FlexibleContexts, TypeOperators, ScopedTypeVariables #-}
+    FlexibleContexts, TypeOperators, ScopedTypeVariables, BangPatterns #-}
 
 import Control.Monad
 import OpenHandlers
@@ -53,8 +53,7 @@ instance (h `Handles` GetC) => (EnStrHandler h a `Handles` GetC) where
   clause (EnStrHandler (c:t)) GetC k = k (EnStrHandler t) (Just c)
 
 instance (h `Handles` op) => (EnStrHandler h a `Handles` op) where
-    clause h op k = Comp (\h' k' ->
-                              clause h' op (\h'' x -> unComp (k h x) h'' k'))
+    clause h op k = doOp op >>= k h
 
 en_str :: String -> I a -> I a
 en_str s comp = handle comp (EnStrHandler s) (const return)
@@ -67,8 +66,7 @@ instance (RunHandler h a `Handles` GetC) where
   clause h GetC k = k h Nothing
 
 instance (h `Handles` op) => (RunHandler h a `Handles` op) where
-  clause h op k = Comp (\h' k' ->
-                           clause h' op (\h'' x -> unComp (k h x) h'' k'))
+  clause h op k = doOp op >>= k h
 
 run :: String -> I a -> Comp h a
 run s comp = handle comp (RunHandler s) (const return)
@@ -81,8 +79,7 @@ instance (FlipHandler h a `Handles` GetC) where
   clause (FlipHandler (False, _, kl)) GetC kr = do {c <- getC; kl (FlipHandler (True, c, kr)) c}
 
 instance (h `Handles` op) => (FlipHandler h a `Handles` op) where
-  clause h op k = Comp (\h' k' ->
-                            clause h' op (\h'' x -> unComp (k h x) h'' k'))
+  clause h op k = doOp op >>= k h
 
 -- synchronise two iteratees
 (<|) :: I a -> I a -> I a
@@ -127,3 +124,30 @@ pGetline' = oneL >>= check
   where check (Just '\n') = return ""
         check Nothing     = return ""
         check (Just c)    = liftM (c:) pGetline'
+
+
+countI :: Char -> I Int
+countI c = count' 0
+  where
+    count' :: Int -> I Int
+    count' !n =
+      do
+        mc <- getC
+        case mc of
+            Nothing -> return n
+            Just c' -> count' (if c==c' then n+1 else n)
+            
+countH :: Char -> String -> Int
+countH c s = eval s (countI c)
+
+count :: Char -> String -> Int
+count c s = count' s 0
+  where
+    count' :: String -> Int -> Int
+    count' []      !n = n
+    count' (c':cs) !n = count' cs (if c==c' then n+1 else n)
+    
+test n = if n == 0 then ""
+         else "abc" ++ test (n-1)
+
+main = putStrLn (show $ countH 'a' (test 100000000))
