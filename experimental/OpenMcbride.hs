@@ -56,15 +56,14 @@ put = applyOp Put
 
 newtype Id a = Id {unId :: a}
 
-data StateHandler s = StateHandler 
+data StateHandler s = StateHandler s
 instance Handler (StateHandler s) where
   type Result (StateHandler s) = Id
   ret _ x = Id x
 
 instance (StateHandler s `Handles` Put s) where
-  clause m h s k = handle (k ()) h
+  clause m h                s  k = handleState s (k ())
+instance (StateHandler s `Handles` Get s) where
+  clause _ (StateHandler s) () k = handleState s (k s)
 
--- handleState s comp = handle comp StateHandler
-
--- instance (StateHandler s `Handles` Get s) where
---   clause _ _ _ k = (\s -> k s s)
+handleState s comp = handle comp (StateHandler s)
