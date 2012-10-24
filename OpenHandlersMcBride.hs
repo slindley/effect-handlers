@@ -7,10 +7,6 @@
 
 module OpenHandlers where
 
--- we might consider defining the following type synonym for handlers:
---
---   type Handler h a = (h, Cont h a)
-
 type family Return op :: *
 type family Result h :: *
 
