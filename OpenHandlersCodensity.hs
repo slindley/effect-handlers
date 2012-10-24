@@ -15,7 +15,7 @@ type family Result h :: *
 class Handles h op where
   clause :: h -> op -> (h -> Return op -> Result h) -> Result h
 
-newtype Comp e a = Comp {unComp :: forall r . (a -> RawComp e r) -> RawComp e r}
+newtype Comp h a = Comp {unComp :: forall r . (a -> RawComp h r) -> RawComp h r}
 data RawComp h a where
   Ret :: a -> RawComp h a
   Do  :: (h `Handles` op) => op -> (Return op -> RawComp h a) -> RawComp h a
