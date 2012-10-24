@@ -1,5 +1,4 @@
 {- Parameterised open handlers with parameterised operations
-   (simplified)
 
    This version has two type families for specifying the return type
    of operations and the result type of handlers. Only one type class
@@ -13,6 +12,9 @@
 
    The return clause is passed in as an argument to the handle
    function.
+
+   We support polymorphic operations straightforwardly by defining a 
+   further type class (PolyHandles).
 -}
 
 {-# LANGUAGE TypeFamilies,
@@ -42,11 +44,17 @@ instance Functor (Comp h) where
 doOp :: (h `Handles` op) => op -> Comp h (Return op)
 doOp op = Comp (\h k -> clause h op k)
 
-forward :: (Handles h op) => h' -> op -> (h' -> Return op -> Comp h a) -> Comp h a
+forward :: (h `Handles` op) => h' -> op -> (h' -> Return op -> Comp h a) -> Comp h a
 forward h op k = doOp op >>= k h
 
+-- polymorphic operations
+class (h `PolyHandles` op) where
+  polyClause :: h -> op a -> Cont h (Return (op a)) -> Result h
 
+polyDoOp :: (h `PolyHandles` op) => op a -> Comp h (Return (op a))
+polyDoOp op = Comp (\h k -> polyClause h op k)
 
+-- pure handlers
 data PureHandler a = PureHandler
 type instance Result (PureHandler a) = a
 
