@@ -1,5 +1,4 @@
 {- Parameterised open handlers with parameterised operations
-   (simplified)
 
    This version has two type families for specifying the return type
    of operations and the result type of handlers. Only one type class
@@ -13,6 +12,9 @@
 
    The return clause is passed in as an argument to the handle
    function.
+
+   We support polymorphic operations straightforwardly by defining a 
+   further type class (PolyHandles).
 -}
 
 {-# LANGUAGE TypeFamilies,
@@ -34,11 +36,11 @@ type Cont h a = h -> a -> Result h
 class Handles h op where
   clause :: h -> op -> Cont h (Return op) -> Result h
 
-newtype Comp h a = Comp {unComp :: h -> Cont h a -> Result h}
+newtype Comp h a = Comp {handle :: h -> Cont h a -> Result h}
 
 instance Monad (Comp h) where
   return v     = Comp (\h k -> k h v)
-  Comp c >>= f = Comp (\h k -> c h (\h' x -> unComp (f x) h' k))
+  Comp c >>= f = Comp (\h k -> c h (\h' x -> handle (f x) h' k))
 
 instance Functor (Comp h) where
   fmap f c = c >>= return . f
@@ -46,8 +48,22 @@ instance Functor (Comp h) where
 doOp :: (h `Handles` op) => op -> Comp h (Return op)
 doOp op = Comp (\h k -> clause h op k)
 
-handle :: Comp h a -> h -> Cont h a -> Result h
-handle (Comp c) h = c h
+forward :: (h `Handles` op) => h' -> op -> (h' -> Return op -> Comp h a) -> Comp h a
+forward h op k = doOp op >>= k h
+
+-- polymorphic operations
+class (h `PolyHandles` op) where
+  polyClause :: h -> op a -> Cont h (Return (op a)) -> Result h
+
+polyDoOp :: (h `PolyHandles` op) => op a -> Comp h (Return (op a))
+polyDoOp op = Comp (\h k -> polyClause h op k)
+
+-- pure handlers
+data PureHandler a = PureHandler
+type instance Result (PureHandler a) = a
+
+handlePure :: Comp (PureHandler a) a -> a
+handlePure c = handle c PureHandler (const id)
 
 data Get s = Get
 type instance Return (Get s) = s
@@ -64,7 +80,7 @@ instance (StateHandler s a `Handles` Get s) where
 instance (StateHandler s a `Handles` Put s) where
   clause _ (Put s) k = k (StateHandler s) ()
 
-count =
+countTest =
     do {n <- get;
         if n == (0 :: Int) then return ()
-        else do {put (n-1); count}}
+        else do {put (n-1); countTest}}

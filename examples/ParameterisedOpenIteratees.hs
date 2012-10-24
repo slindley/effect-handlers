@@ -7,7 +7,7 @@
 
 {-# LANGUAGE GADTs, TypeFamilies, NoMonomorphismRestriction, RankNTypes, ImpredicativeTypes,
     MultiParamTypeClasses, FlexibleInstances, OverlappingInstances,
-    FlexibleContexts, TypeOperators, ScopedTypeVariables #-}
+    FlexibleContexts, TypeOperators, ScopedTypeVariables, BangPatterns #-}
 
 import Control.Monad
 import OpenHandlers
@@ -53,25 +53,33 @@ instance (h `Handles` GetC) => (EnStrHandler h a `Handles` GetC) where
   clause (EnStrHandler (c:t)) GetC k = k (EnStrHandler t) (Just c)
 
 instance (h `Handles` op) => (EnStrHandler h a `Handles` op) where
-    clause h op k = Comp (\h' k' ->
-                              clause h' op (\h'' x -> unComp (k h x) h'' k'))
+    clause h op k = doOp op >>= k h
 
 en_str :: String -> I a -> I a
 en_str s comp = handle comp (EnStrHandler s) (const return)
 
 -- RunHandler throws away any outstanding unhandled GetC applications
-data RunHandler h a = RunHandler String
+data RunHandler h a = RunHandler
 type instance Result (RunHandler h a) = Comp h a
 
 instance (RunHandler h a `Handles` GetC) where
   clause h GetC k = k h Nothing
 
 instance (h `Handles` op) => (RunHandler h a `Handles` op) where
-  clause h op k = Comp (\h' k' ->
-                           clause h' op (\h'' x -> unComp (k h x) h'' k'))
+  clause h op k = doOp op >>= k h
 
-run :: h -> Cont h a -> String -> I a -> Result h
-run h r s comp = handle (handle comp (RunHandler s) (const return)) h r
+run :: I a -> Comp h a
+run comp = handle comp RunHandler (const return)
+
+-- like PureRunHandler but with no underlying handler
+data PureRunHandler a = PureRunHandler
+type instance Result (PureRunHandler a) = a
+
+instance (PureRunHandler a `Handles` GetC) where
+  clause h GetC k = k h Nothing
+  
+pureRun :: I a -> a
+pureRun comp = handle comp PureRunHandler (const id)
 
 data FlipHandler h a = (h `Handles` GetC) => FlipHandler (Bool, LChar, FlipHandler h a -> LChar -> Comp h a)
 type instance Result (FlipHandler h a) = Comp h a
@@ -81,8 +89,7 @@ instance (FlipHandler h a `Handles` GetC) where
   clause (FlipHandler (False, _, kl)) GetC kr = do {c <- getC; kl (FlipHandler (True, c, kr)) c}
 
 instance (h `Handles` op) => (FlipHandler h a `Handles` op) where
-  clause h op k = Comp (\h' k' ->
-                            clause h' op (\h'' x -> unComp (k h x) h'' k'))
+  clause h op k = doOp op >>= k h
 
 -- synchronise two iteratees
 (<|) :: I a -> I a -> I a
@@ -127,3 +134,30 @@ pGetline' = oneL >>= check
   where check (Just '\n') = return ""
         check Nothing     = return ""
         check (Just c)    = liftM (c:) pGetline'
+
+
+countI :: Char -> I Int
+countI c = count' 0
+  where
+    count' :: Int -> I Int
+    count' !n =
+      do
+        mc <- getC
+        case mc of
+            Nothing -> return n
+            Just c' -> count' (if c==c' then n+1 else n)
+            
+countH :: Char -> String -> Int
+countH c s = pureRun (en_str s (countI c))
+
+count :: Char -> String -> Int
+count c s = count' s 0
+  where
+    count' :: String -> Int -> Int
+    count' []      !n = n
+    count' (c':cs) !n = count' cs (if c==c' then n+1 else n)
+    
+test n = if n == 0 then ""
+         else "abc" ++ test (n-1)
+
+main = putStrLn (show $ countH 'a' (test 100000000))
