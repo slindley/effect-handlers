@@ -22,14 +22,18 @@ dist ps = polyDoOp (Dist ps)
 
 data Void
 
-data Failure = Failure
-type instance Return Failure = Void
-failure = doOp Failure >>= undefined
+-- data Failure = Failure
+-- type instance Return Failure = Void
+-- failure = doOp Failure >>= undefined
+
+data Failure a = Failure
+type instance Return (Failure a) = a
+failure = polyDoOp Failure
 
 type Prob = Double
 
 --type P a = (h `Handles` Dice, h `Handles` Failure) => Comp h a
-type P a = forall h.(h `PolyHandles` Dist, h `Handles` Failure) => Comp h a
+type P a = forall h.(h `PolyHandles` Dist, h `PolyHandles` Failure) => Comp h a
 
 data VC a = V a | C (PV a)
 type PV a = [(Prob, VC a)]
@@ -48,8 +52,8 @@ type instance Result (PVHandler a) = PV a
 instance (PVHandler a `PolyHandles` Dist) where
   polyClause h (Dist ps) k = map (\(p, v) -> (p, C (k h v))) ps
 
-instance (PVHandler a `Handles` Failure) where
-  clause h Failure k = []
+instance (PVHandler a `PolyHandles` Failure) where
+  polyClause h Failure k = []
   
 reify :: P a -> PV a
 reify comp = handle comp PVHandler (const (\x -> [(1, V x)]))
