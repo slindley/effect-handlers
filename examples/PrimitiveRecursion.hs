@@ -14,7 +14,10 @@ step = applyOp Step ()
 -- natural numbers can be encoded as computations over the Step operation
 type Nat = Comp (Step, ()) ()
 
+zero :: Nat
 zero  = return ()
+
+suc :: Nat -> Nat
 suc n = step >> n
 
 one   = suc zero
@@ -55,10 +58,17 @@ rec n v f =
   (handle n
    ((Step |-> \() k ->
       let (p, q) = k () in
-      (suc p, f q (suc p))) :<: Empty,
+      (suc p, f q p)) :<: Empty,
     \() -> (zero, v)))
+
+-- an iterator
+iter :: Nat -> a -> (a -> a) -> a
+iter n v f =
+  handle n
+   (Step |-> (\() k -> f (k ())) :<: Empty,
+    \() -> v)
 
 -- predecessor function
 pred :: Nat -> Nat
 pred n =
-  fst (rec n (zero, zero) (\ (_, x) _ -> (x, suc x)))
+  fst (iter n (zero, zero) (\ (_, x) -> (x, suc x)))
