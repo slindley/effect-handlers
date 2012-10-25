@@ -5,7 +5,7 @@
 -- 
 --   http://okmij.org/ftp/Haskell/Iteratee/describe.pdf
 
-{-# LANGUAGE GADTs, TypeFamilies, NoMonomorphismRestriction, RankNTypes, ImpredicativeTypes,
+{-# LANGUAGE GADTs, TypeFamilies, NoMonomorphismRestriction, RankNTypes,
     MultiParamTypeClasses, FlexibleInstances, OverlappingInstances,
     FlexibleContexts, TypeOperators, ScopedTypeVariables, BangPatterns #-}
 
@@ -18,9 +18,9 @@ data GetC = GetC
 type instance Return GetC = LChar
 getC = doOp GetC
 
-type I a = (h `Handles` GetC) => Comp h a
+type I a = forall h.(h `Handles` GetC) => Comp h a
 
-getline :: (h `Handles` GetC) => Comp h String
+getline :: I String
 getline = loop ""
   where loop acc =
           do w <- getC
@@ -39,7 +39,7 @@ eval :: String -> I a -> a
 eval s comp =
     handle comp (EvalHandler s) (const id)
 
-getlines :: (h `Handles` GetC) => Comp h [String]
+getlines :: I [String]
 getlines = loop []
   where loop acc = getline >>= check acc
         check acc "" = return (reverse acc)
