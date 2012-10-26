@@ -63,7 +63,13 @@ data PureHandler a = PureHandler
 type instance Result (PureHandler a) = a
 
 handlePure :: Comp (PureHandler a) a -> a
-handlePure c = handle c PureHandler (const id)
+handlePure comp = handle comp PureHandler (const id)
+
+data IOHandler a = IOHandler
+type instance Result (IOHandler a) = IO a
+
+handleIO :: Comp (IOHandler a) a -> IO a
+handleIO comp = handle comp IOHandler (const return)
 
 data Get s = Get
 type instance Return (Get s) = s
