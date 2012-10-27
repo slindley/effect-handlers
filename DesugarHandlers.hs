@@ -6,7 +6,9 @@
 
   * Generate type signatures for operation functions.
 
-  * Syntax for handler extension?
+  * Sugar for return clauses?
+
+  * Sugar for handler extension?
 
   * McBride handlers?
 
@@ -133,6 +135,11 @@
     stateHandler comp s r = handle comp (StateHandler s) r
 
   Doing something like this for McBride handlers might make sense.
+
+  If we have a wrapper function, then we could add sugar for a fixed
+  return clause which is always supplied to the handler by the wrapper
+  function.
+
 -}
 
 module DesugarHandlers where
