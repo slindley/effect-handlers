@@ -7,22 +7,22 @@ import Data.Char (isSpace)
 
 type HandlerDef = (Maybe String, String, [String], [(String, [String])], String, String)
 
-handlerSig :: GenParser Char a ([(String, [String])], String)
+handlerSig :: GenParser Char a [(String, [String])]
 handlerSig =
     do
+      spaces
       sig <-
           (do
+            string "handles"
+            spaces
             char '{'
             sig <- opSig `sepBy1` char ','
             char '}'
             spaces
-            string "->"
-            spaces
             return sig)
            <|>
            (return [])
-      r <- result
-      return (sig, r)
+      return sig
 
 opSig :: GenParser Char a (String, [String])
 opSig =
@@ -50,7 +50,12 @@ handlerdef =
       ts <- tyVars
       char ':'
       spaces
-      (sig, r) <- handlerSig
+      r <- result
+      sig <- handlerSig
+      spaces
+      string "where"
+      many isSpaceNoNewline
+      many newline
       cs <- clauses
       return (h, name, ts, sig, r, cs)
 
@@ -66,7 +71,8 @@ forward =
 
 isSpaceNoNewline = satisfy (\c -> isSpace c && c /= '\n' && c /= '\r')
 
-result = manyTill anyChar (try (do {spaces; string "where"; many isSpaceNoNewline; many newline}))
+result = manyTill anyChar (try (lookAhead (do {many1 space; string "handles" <|> string "where"})))
+--result = manyTill anyChar (try (do {spaces; string "where"; many isSpaceNoNewline; many newline}))
 clauses = many anyChar
 
 

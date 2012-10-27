@@ -40,23 +40,7 @@ instance (Show a) => Show (VC a) where
   show (V a) = show a
   show (C a) = "?"
 
--- [extend|forward h.PVHandler a : {} where
---   ...
--- |]
-
--- [handler|forward h.PVHandler a : (Dist, Failure) -> Comp h (PV a) where
---   polyClause h (Dist ps) k = mapM (\(p, v) -> do {t <- k h v; return $ (p, C t)}) ps
---   polyClause h Failure   k = return []
--- |]
--- handler PVHandler a : PV a where
---   h (dist ps) k = map (\(p, v) -> p, C (k h v)) ps
---   h failure   k = []
--- [handler| PVHandler a : PV a where
---   h (dist ps) k = map (\(p, v) -> p, C (k h v)) ps
---   h failure   k = []
--- |]
-
-[handler|forward h.PVHandler a : {Dist, Failure} -> Comp h (PV a) where
+[handler|forward h.PVHandler a : Comp h (PV a) handles {Dist, Failure} where
   polyClause h (Dist ps) k = mapM (\(p, v) -> do {t <- k h v; return $ (p, C t)}) ps
   polyClause h Failure k = return []
 |]
@@ -212,11 +196,7 @@ forceComp x m =
         return (unsafeCoerce v, m')
     Just (RightComp v) -> return (unsafeCoerce v, m)
 
--- handler(h) letLazyHandler a : Int -> (Map.Map Int EitherComp) -> Comp h a where
---   letLazyHandler x m (LetLazy q) k = ...
---   letLazyHandler y m (Force (LazyVar x)) k = ...
-
-[handler|forward h.LetLazyHandler a : {LetLazy} -> Int -> CompMap -> Comp h a where
+[handler|forward h.LetLazyHandler a : Int -> CompMap -> Comp h a handles {LetLazy} where
   polyClause (LetLazyHandler x m) (LetLazy q) k =
     k (LetLazyHandler (x+1) (Map.insert x (LeftComp q) m)) (LazyVar x)
 |]
@@ -299,7 +279,7 @@ instance (h `Handles` Rand) => (SampleHandler h a `PolyHandles` Dist) where
 -- instance (h `PolyHandles` op) => (SampleHandler h a `PolyHandles` op) where
 --   polyClause h op k = polyDoOp op >>= k h
 
-[handler|forward h.SampleLoop a : {Failure} -> Comp (SampleLoop h a) a -> Comp h a where
+[handler|forward h.SampleLoop a : Comp (SampleLoop h a) a -> Comp h a handles {Failure} where
   polyClause h@(SampleLoop comp) Failure k = handle comp h (const return)
 |]
 

@@ -1,5 +1,9 @@
 {- TODO:
 
+  * Check that there are no redundant clauses in handlers (those that
+    don't match up with any of the declared operations are just
+    ignored).
+
   * Generate type signatures for operation functions.
 
   * Syntax for handler extension?
@@ -7,9 +11,6 @@
   * McBride handlers?
 
   * Closure conversion? Perhaps not feasible using Template Haskell.
-
-  * The curly brace syntax for specifying the operations defined in a
-  handler quasiquote is probably suboptimal. Consider alternatives.
  -}
 
 {- Examples -}
@@ -37,7 +38,7 @@
 
   A non-forwarding state handler:
 
-    [handler|StateHandler s a : {Get s, Put s} -> s -> a  where
+    [handler|StateHandler s a : s -> a handles {Get s, Put s} where
       clause (StateHandler s) Get k = k (StateHandler s) s
       clause _ (Put s) k = k (StateHandler s) ()
     |]
@@ -53,7 +54,7 @@
 
   A forwarding state handler:
 
-    [handler|forward h.FStateHandler s a : {Get s, Put s} -> s -> a where
+    [handler|forward h.FStateHandler s a : s -> a handles {Get s, Put s} where
       clause (FStateHandler s) Get k = k (FStateHandler s) s
       clause _ (Put s) k = k (FStateHandler s) ()
     |]
@@ -86,7 +87,7 @@
 
   A polymorphic handler:
 
-    [handler|MaybeHandler a : {Failure} -> Maybe a where
+    [handler|MaybeHandler a : Maybe a handles {Failure} where
        polyClause _ Failure k = Nothing
     |]
 
@@ -103,10 +104,13 @@
   class. Sometimes we have to do this when we require an explicit
   class constraint.
 
+  Any clauses that reference operations not declared in curly braces
+  are currently ignored.
+
   We might consider adapting the sugar to inline handler parameters as
   curried arguments to the clauses and the continuation. For instance:
 
-    [handler|StateHandler s a : {Get s, Put s} -> s -> a where
+    [handler|StateHandler s a :  s -> a handles {Get s, Put s} where
       clause s Get     k = k s s
       clause s (Put s) k = k s ()
     |]
@@ -129,14 +133,6 @@
     stateHandler comp s r = handle comp (StateHandler s) r
 
   Doing something like this for McBride handlers might make sense.
-
-  Perhaps we should change the syntax to make it the status of the
-  handled operations clearer:
-
-    [handler|StateHandler s a : s -> a handles {Get s, Put s} where
-      clause (StateHandler s) Get k = k (StateHandler s) s
-      clause _ (Put s) k = k (StateHandler s) ()
-    |]
 -}
 
 module DesugarHandlers where
@@ -216,7 +212,7 @@ makeHandlerDef (h, name, ts, sig, r, cs) = [handlerType, resultInstance] ++ opCl
             polys = concat [lookupDecs opName d | d <- polyDecs]
             (handles, decs) =
                 case (monos, polys) of
-                  ([], []) -> undefined
+                  ([], []) -> error $ "No clause for operation: " ++ opName
                   (_, [])  -> (ConT monoHandles, monos)
                   ([], _)  -> (ConT polyHandles, polys)
 

@@ -76,7 +76,7 @@ handleIO comp = handle comp IOHandler (const return)
 [operation|Get s : s|]
 [operation|Put s : s -> ()|]
 
-[handler|StateHandler s a : s -> a where
+[handler|StateHandler s a : s -> a handles {Get s, Put s} where
   clause (StateHandler s) Get k = k (StateHandler s) s
   clause _ (Put s) k = k (StateHandler s) ()
 |]
@@ -96,7 +96,7 @@ handleIO comp = handle comp IOHandler (const return)
 -- instance (StateHandler s a `Handles` Put s) where
 --   clause _ (Put s) k = k (StateHandler s) ()
 
--- countTest =
---     do {n <- get;
---         if n == (0 :: Int) then return ()
---         else do {put (n-1); countTest}}
+countTest =
+    do {n <- get;
+        if n == (0 :: Int) then return ()
+        else do {put (n-1); countTest}}
