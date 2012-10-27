@@ -5,11 +5,6 @@
 import Control.Monad
 import OpenHandlers
 
-
--- data Failure = Failure
--- type instance Return Failure = Void
--- failure = doOp Failure >>= undefined
-
 data DivideByZero a = DivideByZero
 type instance Return (DivideByZero a) = a
 divideByZero = polyDoOp DivideByZero
@@ -33,6 +28,18 @@ divs =
     d <- getD
     fmap ((:) (n `div` d)) divs
     
+data StreamKind = Numerator | Denominator
+
+data DivReader a = DivReader [Int] [Int]
+type instance Result (DivReader a) = a
+instance (DivReader a `Handles` GetN) where
+  clause (DivReader (n:ns) ds) GetN k = k (DivReader ns ds) n
+instance (DivReader a `Handles` GetD) where
+  clause (DivReader ns (d:ds)) GetD k = k (DivReader ns ds) d
+  
+readAndDivide ns ds = handle divs (DivReader ns ds) (const id)
+
+
 -- TODO: reinterpret this computation to support various kinds of
 -- error conditions / exception handling
 
