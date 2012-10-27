@@ -24,6 +24,8 @@
 
 module OpenHandlers where
 
+import DesugarHandlers
+
 -- we might consider defining the following type synonym for handlers:
 --
 --   type Handler h a = (h, Cont h a)
@@ -71,22 +73,30 @@ type instance Result (IOHandler a) = IO a
 handleIO :: Comp (IOHandler a) a -> IO a
 handleIO comp = handle comp IOHandler (const return)
 
-data Get s = Get
-type instance Return (Get s) = s
-get = doOp Get
+[operation|Get s : s|]
+[operation|Put s : s -> ()|]
 
-newtype Put s = Put s
-type instance Return (Put s) = ()
-put s = doOp (Put s)
-
-newtype StateHandler s a = StateHandler s
-type instance Result (StateHandler s a) = a
-instance (StateHandler s a `Handles` Get s) where
+[handler|StateHandler s a : s -> a where
   clause (StateHandler s) Get k = k (StateHandler s) s
-instance (StateHandler s a `Handles` Put s) where
   clause _ (Put s) k = k (StateHandler s) ()
+|]
 
-countTest =
-    do {n <- get;
-        if n == (0 :: Int) then return ()
-        else do {put (n-1); countTest}}
+-- data Get s = Get
+-- type instance Return (Get s) = s
+-- get = doOp Get
+
+-- newtype Put s = Put s
+-- type instance Return (Put s) = ()
+-- put s = doOp (Put s)
+
+-- newtype StateHandler s a = StateHandler s
+-- type instance Result (StateHandler s a) = a
+-- instance (StateHandler s a `Handles` Get s) where
+--   clause (StateHandler s) Get k = k (StateHandler s) s
+-- instance (StateHandler s a `Handles` Put s) where
+--   clause _ (Put s) k = k (StateHandler s) ()
+
+-- countTest =
+--     do {n <- get;
+--         if n == (0 :: Int) then return ()
+--         else do {put (n-1); countTest}}
