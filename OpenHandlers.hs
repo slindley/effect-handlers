@@ -26,19 +26,13 @@ module OpenHandlers where
 
 import DesugarHandlers
 
--- we might consider defining the following type synonym for handlers:
---
---   type Handler h a = (h, Cont h a)
-
 type family Return op :: *
 type family Result h :: *
 
-type Cont h a = h -> a -> Result h
-
 class Handles h op where
-  clause :: h -> op -> Cont h (Return op) -> Result h
+  clause :: h -> op -> (h -> Return op -> Result h) -> Result h
 
-newtype Comp h a = Comp {handle :: h -> Cont h a -> Result h}
+newtype Comp h a = Comp {handle :: h -> (h -> a -> Result h) -> Result h}
 
 instance Monad (Comp h) where
   return v     = Comp (\h k -> k h v)
@@ -55,7 +49,7 @@ forward h op k = doOp op >>= k h
 
 -- polymorphic operations
 class (h `PolyHandles` op) where
-  polyClause :: h -> op a -> Cont h (Return (op a)) -> Result h
+  polyClause :: h -> op a -> (h -> Return (op a) -> Result h) -> Result h
 
 polyDoOp :: (h `PolyHandles` op) => op a -> Comp h (Return (op a))
 polyDoOp op = Comp (\h k -> polyClause h op k)
