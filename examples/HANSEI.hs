@@ -299,7 +299,7 @@ sample comp = handle comp SampleHandler (const return)
 sampleLoop :: Q a -> IO a
 sampleLoop comp = handleIO (handle (sample comp) (SampleLoop (sample comp)) (const return))
     
-instance (IOHandler a `Handles` Rand) where
+instance IOHandler a `Handles` Rand where
   clause h Rand k =
     do
       r <- getStdRandom random

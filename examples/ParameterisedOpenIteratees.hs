@@ -11,12 +11,11 @@
 
 import Control.Monad
 import OpenHandlers
+import DesugarHandlers
 
 type LChar = Maybe Char
 
-data GetC = GetC
-type instance Return GetC = LChar
-getC = doOp GetC
+[operation|GetC : LChar|]
 
 type I a = forall h.(h `Handles` GetC) => Comp h a
 
@@ -28,12 +27,17 @@ getline = loop ""
         check acc (Just c) | c /= '\n' = loop (c:acc)
         check acc _                    = return (reverse acc)
 
-data EvalHandler a = EvalHandler String
-type instance Result (EvalHandler a) = a
-
-instance (EvalHandler a `Handles` GetC) where
+[handler|EvalHandler a : String -> a handles {GetC} where
   clause (EvalHandler "")    GetC k = k (EvalHandler "") Nothing
   clause (EvalHandler (c:t)) GetC k = k (EvalHandler t) (Just c)
+|]
+
+-- data EvalHandler a = EvalHandler String
+-- type instance Result (EvalHandler a) = a
+
+-- instance (EvalHandler a `Handles` GetC) where
+--   clause (EvalHandler "")    GetC k = k (EvalHandler "") Nothing
+--   clause (EvalHandler (c:t)) GetC k = k (EvalHandler t) (Just c)
 
 eval :: String -> I a -> a
 eval s comp =
