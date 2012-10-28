@@ -112,7 +112,7 @@
   We might consider adapting the sugar to inline handler parameters as
   curried arguments to the clauses and the continuation. For instance:
 
-    [handler|StateHandler s a :  s -> a handles {Get s, Put s} where
+    [handler|StateHandler s a : s -> a handles {Get s, Put s} where
       clause s Get     k = k s s
       clause s (Put s) k = k s ()
     |]

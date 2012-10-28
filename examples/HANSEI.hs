@@ -42,7 +42,7 @@ instance (Show a) => Show (VC a) where
 
 [handler|forward h.PVHandler a : Comp h (PV a) handles {Dist, Failure} where
   polyClause h (Dist ps) k = mapM (\(p, v) -> do {t <- k h v; return $ (p, C t)}) ps
-  polyClause h Failure k = return []
+  polyClause h Failure   k = return []
 |]
 
 
