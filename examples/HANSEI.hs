@@ -1,7 +1,7 @@
 {-# LANGUAGE TypeFamilies, NoMonomorphismRestriction, RankNTypes,
     MultiParamTypeClasses, FlexibleInstances, GADTs,
     OverlappingInstances, QuasiQuotes, TemplateHaskell,
-    FlexibleContexts, TypeOperators, ScopedTypeVariables #-}
+    FlexibleContexts, TypeOperators, ScopedTypeVariables, ConstraintKinds #-}
 
 import Control.Monad
 import System.Random
@@ -24,12 +24,19 @@ normalise ps = map (\ (p, v) -> (p / m, v) ) ps
   where
     m = mass ps
 
-[operation|Dist    : forall a.[(Prob, a)] -> a|]
-[operation|Failure : forall a.a|] 
+[operation|forall a.Dist    : [(Prob, a)] -> a|]
+[operation|forall a.Failure : a|] 
 
 type Prob = Double
 
-type P a = forall h.(h `PolyHandles` LetLazy, h `PolyHandles` Force, h `PolyHandles` Dist, h `PolyHandles` Failure) => Comp h a
+type DistFail h = (h `PolyHandles` Dist, h `PolyHandles` Failure)
+type LazyForce h = (h `PolyHandles` LetLazy, h `PolyHandles` Force)
+
+-- type P a = forall h.(DistFail h, LazyForce h) => Comp h a
+-- type Q a = forall h.DistFail h => Comp h a
+
+type P a = forall h.(h `PolyHandles` LetLazy, h `PolyHandles` Force,
+                     h `PolyHandles` Dist, h `PolyHandles` Failure) => Comp h a
 type Q a = forall h.(h `PolyHandles` Dist, h `PolyHandles` Failure) => Comp h a
 
 data VC a = V a | C (PV a)
@@ -39,10 +46,9 @@ instance (Show a) => Show (VC a) where
   show (V a) = show a
   show (C a) = "?"
 
-[handler|forward h.PVHandler a : Comp h (PV a) handles {Dist, Failure} where
-  polyClause h (Dist ps) k =
-    mapM (\(p, v) -> do {t <- k h v; return $ (p, C t)}) ps
-  polyClause h Failure   k = return []
+[handler|PVHandler a : PV a handles {Dist, Failure} where
+  polyClause h (Dist ps) k = map (\(p, v) -> (p, C (k h v))) ps
+  polyClause h Failure   k = []
 |]
 
 
@@ -61,17 +67,11 @@ instance (Show a) => Show (VC a) where
 
 reify0 :: Q a -> PV a
 reify0 comp =
-  handlePure (handle comp PVHandler (const (\x -> return [(1, V x)])))
-
+  handle comp PVHandler (const (\x -> [(1, V x)]))
 
 reify :: P a -> PV a
 reify comp =
-  handlePure (handle (handle comp letLazyHandler (const return)) PVHandler (const (\x -> return [(1, V x)])))
-
---reify :: P a -> PV a
-reify' comp =
-  handle (handle comp letLazyHandler (const return)) PVHandler (const (\x -> return [(1, V x)]))
-
+  handle (handle comp letLazyHandler (const return)) PVHandler (const (\x -> [(1, V x)]))
 
 -- dist' :: [(Prob, a)] -> P' a
 -- dist' [] = failure
@@ -136,21 +136,18 @@ reflectUntil n choices =
       V a        -> return a
       C choices' -> reflectUntil (n-1) choices'
       
---[operation|forall r.Stop a : PV a -> r|]
+[operation|forall r.Stop a : PV a -> r|]
 
-newtype Stop a r = Stop (PV a)
-type instance Return (Stop a r) = r
-stop x = polyDoOp (Stop x)
-
+--type Q' a = forall h.(DistFail h, h `PolyHandles` Stop a) => Comp h a
 type Q' a = forall h.(h `PolyHandles` Dist, h `PolyHandles` Failure, h `PolyHandles` Stop a) => Comp h a
 
 
 [handler|
-  ExploreHandler a : Prob -> Map.Map a Prob -> Map.Map a Prob
+  forward h.ExploreHandler a : Prob -> Map.Map a Prob -> Comp h (Map.Map a Prob)
     handles {Failure, Dist} where
-      polyClause (ExploreHandler _ m) Failure      k = m
+      polyClause (ExploreHandler _ m) Failure      k = return m
       polyClause (ExploreHandler s m) (Dist ps)    k =
-        foldl (\m' (p, v) -> k (ExploreHandler (s*p) m') v) m ps
+        foldM (\m' (p, v) -> k (ExploreHandler (s*p) m') v) m ps
 |]
     
 -- data ExploreHandler h a = ExploreHandler Prob (Map.Map a Prob)
@@ -161,16 +158,17 @@ type Q' a = forall h.(h `PolyHandles` Dist, h `PolyHandles` Failure, h `PolyHand
 -- instance ExploreHandler h a `PolyHandles` Dist where
 --   polyClause (ExploreHandler s m) (Dist ps) k = foldl (\m' (p, v) -> k (ExploreHandler (s*p) m') v) m ps
 
-exploreHandler :: Ord a => Q a -> [(Prob, a)]
+exploreHandler :: Ord a => Comp (ExploreHandler h a) a -> Comp h [(Prob, a)]
 exploreHandler comp =
-  Map.foldrWithKey (\k p l -> (p, k):l) [] ans
+  ans >>= return . (Map.foldrWithKey (\k p l -> (p, k):l) [])
   where
     ans =
       handle comp (ExploreHandler 1 Map.empty)
       (\(ExploreHandler s m) x ->
-        case Map.lookup x m of
+        return 
+        (case Map.lookup x m of
           Nothing -> Map.insert x s m
-          Just p  -> Map.insert x (s+p) m)
+          Just p  -> Map.insert x (s+p) m))
 
 
 [handler|
@@ -222,8 +220,8 @@ tossesXor' n = loop n
 newtype LazyVar a = LazyVar Int
 
 letLazy :: (h `PolyHandles` LetLazy) => Q a -> Comp h (LazyVar a)
-[operation|LetLazy : forall a.Q a -> LazyVar a|]
-[operation|Force   : forall a.LazyVar a -> a|]
+[operation|forall a.LetLazy : Q a -> LazyVar a|]
+[operation|forall a.Force   : LazyVar a -> a|]
 
 -- newtype BoxQ a = BoxQ {unBoxQ :: Q a}
 
@@ -322,26 +320,65 @@ instance (h `Handles` Rand) => (SampleHandler h a `PolyHandles` Dist) where
         accum x target ((y, v):l) | (x+y) > target = v
         accum x target ((y, v):l)                  = accum (x+y) target l
 
+[handler|forward h.ImportanceHandler a : Int -> Double -> Comp h ([(Prob, a)]) where|]
+
+instance (h `Handles` Rand) => ImportanceHandler h a `PolyHandles` Failure where
+  polyClause h Failure k = return []    
+  
+-- -- explicit class constraints
+-- instance (h `Handles` Rand) => ImportanceHandler h a `PolyHandles` Dist where
+--   polyClause h (Dist ps) k =
+--     do
+--       r <- rand
+--       let target = r * mass ps          
+--       k h (accum 0 target ps)
+--       where
+--         accum :: Double -> Double -> [(Prob, b)] -> b
+--         accum x target []                          = undefined 
+--         accum x target ((y, v):l) | (x+y) > target = v
+--         accum x target ((y, v):l)                  = accum (x+y) target l
+
+
 -- instance (h `Handles` op) => (SampleHandler h a `Handles` op) where
 --   clause h op k = doOp op >>= k h
 -- instance (h `PolyHandles` op) => (SampleHandler h a `PolyHandles` op) where
 --   polyClause h op k = polyDoOp op >>= k h
 
-[handler|forward h.SampleLoop a : Comp (SampleLoop h a) a -> Comp h a handles {Failure} where
-  polyClause h@(SampleLoop comp) Failure k = handle comp h (const return)
+
+importanceSample :: (Ord a, h `Handles` Rand, h `PolyHandles` Dist) => Int -> Q a -> Comp h a
+importanceSample i comp = do {ps <- importance i 1.0 (reify0 comp); dist ps}
+  where
+    importance :: (Ord a, h `Handles` Rand) => Int -> Double -> PV a -> Comp h ([(Prob, a)])
+    importance i s pv' =
+      case cs of
+        [] -> return vs
+        _  -> 
+          do
+            r <- rand
+            let target = r * csum  
+            return (vs ++) `ap` importance i s' (accum 0 target cs)
+      where
+        accum :: Double -> Double -> [(Prob, b)] -> b
+        accum x target []                          = undefined 
+        accum x target ((y, v):l) | (x+y) > target = v
+        accum x target ((y, v):l)                  = accum (x+y) target l
+
+        pv = explore (Just i) pv'
+        vs' = [(p, v) | (p, V v) <- pv]
+        cs =  [(p, c) | (p, C c) <- pv]
+        vsum = sum (map fst vs')
+        csum = sum (map fst cs)
+        vcsum = vsum + csum
+        factor = s / vcsum
+        s' = csum * factor
+        vs = [(p * factor, v) | (p, v) <- vs']
+    
+[handler|
+  forward h.SampleLoop a : Comp (SampleLoop h a) a -> Comp h a handles {Failure} where
+    polyClause h@(SampleLoop comp) Failure k = handle comp h (const return)
 |]
 
--- data SampleLoop h a = SampleLoop (Comp (SampleLoop h a) a)
--- type instance Result (SampleLoop h a) = Comp h a
-
--- instance (SampleLoop h a `PolyHandles` Failure) where
---   polyClause h@(SampleLoop comp) Failure k = handle comp h (const return)
-
--- instance (h `Handles` op) => (SampleLoop h a `Handles` op) where
---   clause h op k = doOp op >>= k h
--- instance (h `PolyHandles` op) => (SampleLoop h a `PolyHandles` op) where
---   polyClause h op k = polyDoOp op >>= k h
-
+sample :: Comp (SampleHandler h a) a -> Comp h a
 sample comp = handle comp SampleHandler (const return)
 
 sampleLoop :: Q a -> IO a
@@ -353,13 +390,20 @@ instance IOHandler a `Handles` Rand where
       r <- getStdRandom random
       k h r
 
-samples :: Ord a => Q a -> Int -> IO (PV a)
+samples :: Ord a => Q a -> Int -> IO [(Prob, a)]
 samples comp n =
-  do
-    pv <- handleIO (reify'
+  handleIO (exploreHandler
                     (do
                         let l = take n (repeat (1, ()))
                         () <- dist l
                         sample comp))
-    return $ explore Nothing pv
+
+
+importanceSamples :: Ord a => Int -> Q a -> Int -> IO [(Prob, a)]
+importanceSamples i comp n =
+  handleIO (exploreHandler
+                    (do
+                        let l = take n (repeat (1, ()))
+                        () <- dist l
+                        importanceSample i comp))
 
