@@ -20,7 +20,9 @@
 {-# LANGUAGE TypeFamilies,
     MultiParamTypeClasses,
     TypeOperators,
-    NoMonomorphismRestriction #-}
+    NoMonomorphismRestriction, 
+    TemplateHaskell, QuasiQuotes
+  #-}
 
 module OpenHandlers where
 
