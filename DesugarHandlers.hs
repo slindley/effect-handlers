@@ -142,6 +142,8 @@
 
 -}
 
+{-# LANGUAGE FlexibleContexts #-}
+
 module DesugarHandlers where
 
 import ParseHandlers(parseOpDef, parseHandlerDef, HandlerDef)
@@ -149,8 +151,12 @@ import ParseHandlers(parseOpDef, parseHandlerDef, HandlerDef)
 import Language.Haskell.TH
 import Language.Haskell.TH.Quote
 
+import qualified Language.Haskell.Exts.Parser as Exts
+import Language.Haskell.Exts.Extension (Extension(..))
+
 --import Language.Haskell.SyntaxTrees.ExtsToTH
 import qualified Language.Haskell.Meta.Parse as MetaParse
+import Language.Haskell.Meta.Syntax.Translate (toType)
 
 import Data.Char(toUpper,toLower)
 
@@ -167,10 +173,11 @@ makeHandlerDef (h, name, ts, sig, r, cs) = [handlerType, resultInstance] ++ opCl
       cname = mkName (let (c:cs) = name in toUpper(c) : cs)
       fname = mkName (let (c:cs) = name in toLower(c) : cs)
 
-      tyvars =
+      (tyvars, constraint) =
           (case h of
-             Just h  -> [mkName h]
-             Nothing -> []) ++ map mkName ts
+             Just (h, Nothing) -> ([mkName h] ++ map mkName ts, Nothing)
+             Just (h, Just c)  -> ([mkName h] ++ map mkName ts, Just c)
+             Nothing           -> (map mkName ts, Nothing))
 
       (args, result) = splitFunType (parseType r)
       
@@ -211,9 +218,14 @@ makeHandlerDef (h, name, ts, sig, r, cs) = [handlerType, resultInstance] ++ opCl
       polyHandles = mkName "PolyHandles"
       happ = ConT cname `appType` map VarT tyvars
 
+      ctx =
+        case constraint of
+          Nothing -> []
+          Just s | ForallT [] ctx _ <- parseType (s ++ " => ()") -> ctx
+
       clauseInstance :: (String, [String]) -> Dec
-      clauseInstance (opName, tvs) = InstanceD [] (AppT (AppT handles happ) op) decs
-          where
+      clauseInstance (opName, tvs) = InstanceD ctx (AppT (AppT handles happ) op) decs
+          where              
             op = ConT (mkName opName) `appType` map (VarT . mkName) tvs
             monos = concat [lookupDecs opName d | d <- monoDecs]
             polys = concat [lookupDecs opName d | d <- polyDecs]
@@ -296,8 +308,15 @@ makeOpDefs (poly, name, ts, sig) = return [opType, returnInstance, opFun]
 --     case parseToTH ("undefined :: (" ++ s ++ ")") of
 --       Right (SigE (VarE _) t) -> t
 
+-- parseType :: String -> Type
+-- parseType s | Right t <- MetaParse.parseType s = t 
+
 parseType :: String -> Type
-parseType s | Right t <- MetaParse.parseType s = t 
+parseType s =
+  toType (Exts.fromParseResult
+          (Exts.parseTypeWithMode
+           (Exts.ParseMode "" [FlexibleContexts, TypeOperators] True True Nothing)
+           s))
 
 parseDecs :: String -> [Dec]
 parseDecs s | Right ds <- MetaParse.parseDecs s = ds

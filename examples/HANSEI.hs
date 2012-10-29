@@ -247,15 +247,17 @@ forceComp x m =
 
 [handler|
   forward h.(h `PolyHandles` Dist, h `PolyHandles` Failure) =>
-    LetLazyHandler a : Int -> CompMap -> Comp h a handles {LetLazy} where
+    LetLazyHandler a : Int -> CompMap -> Comp h a handles {LetLazy, Force} where
       polyClause (LetLazyHandler x m) (LetLazy q) k =
         k (LetLazyHandler (x+1) (Map.insert x (LeftComp q) m)) (LazyVar x)
+      polyClause (LetLazyHandler y m) (Force (LazyVar x)) k =
+        do {(v, m') <- forceComp x m; k (LetLazyHandler y m') v}
 |]
 -- we need to give the Force clause as an explicit type class
 -- instance, as it includes additional type class constraints
-instance (h `PolyHandles` Dist, h `PolyHandles` Failure) => (LetLazyHandler h a `PolyHandles` Force) where
-  polyClause (LetLazyHandler y m) (Force (LazyVar x)) k =
-    do {(v, m') <- forceComp x m; k (LetLazyHandler y m') v}
+-- instance (h `PolyHandles` Dist, h `PolyHandles` Failure) => (LetLazyHandler h a `PolyHandles` Force) where
+--   polyClause (LetLazyHandler y m) (Force (LazyVar x)) k =
+--     do {(v, m') <- forceComp x m; k (LetLazyHandler y m') v}
 
 -- data LetLazyHandler h a = LetLazyHandler Int CompMap
 -- type instance Result (LetLazyHandler h a) = Comp h a
@@ -308,27 +310,44 @@ allHeads n =
 
 [operation|Rand : Double|]
 
-[handler|forward h.SampleHandler a : Comp h a where|]
--- data SampleHandler h a = SampleHandler
--- type instance  Result (SampleHandler h a) = Comp h a
-
--- explicit class constraints
-instance (h `Handles` Rand) => (SampleHandler h a `PolyHandles` Dist) where
+[handler|forward h.(h `Handles` Rand) => SampleHandler a : Comp h a handles {Dist} where
   polyClause h (Dist ps) k =
     do
       r <- rand
       let target = r * mass ps          
       k h (accum 0 target ps)
       where
-        accum :: Double -> Double -> [(Prob, b)] -> b
+        accum :: forall b.Double -> Double -> [(Prob, b)] -> b
         accum x target []                          = undefined 
         accum x target ((y, v):l) | (x+y) > target = v
         accum x target ((y, v):l)                  = accum (x+y) target l
+|]
 
-[handler|forward h.ImportanceHandler a : Int -> Double -> Comp h ([(Prob, a)]) where|]
+-- data SampleHandler h a = SampleHandler
+-- type instance  Result (SampleHandler h a) = Comp h a
 
-instance (h `Handles` Rand) => ImportanceHandler h a `PolyHandles` Failure where
-  polyClause h Failure k = return []    
+-- explicit class constraints
+-- instance (h `Handles` Rand) => (SampleHandler h a `PolyHandles` Dist) where
+--   polyClause h (Dist ps) k =
+--     do
+--       r <- rand
+--       let target = r * mass ps          
+--       k h (accum 0 target ps)
+--       where
+--         accum :: Double -> Double -> [(Prob, b)] -> b
+--         accum x target []                          = undefined 
+--         accum x target ((y, v):l) | (x+y) > target = v
+--         accum x target ((y, v):l)                  = accum (x+y) target l
+
+[handler|
+  forward h.(h `Handles` Rand) =>
+    ImportanceHandler a : Int -> Double -> Comp h ([(Prob, a)])
+      handles {Failure} where
+        polyClause h Failure k = return []    
+|]
+
+-- instance (h `Handles` Rand) => ImportanceHandler h a `PolyHandles` Failure where
+--   polyClause h Failure k = return []    
   
 -- -- explicit class constraints
 -- instance (h `Handles` Rand) => ImportanceHandler h a `PolyHandles` Dist where

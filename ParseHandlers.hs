@@ -2,10 +2,11 @@ module ParseHandlers where
 
 import Text.ParserCombinators.Parsec
 import Data.Char (isSpace)
+import ParseCode
 
 {- Handler definitions -}
 
-type HandlerDef = (Maybe String, String, [String], [(String, [String])], String, String)
+type HandlerDef = (Maybe (String, Maybe String), String, [String], [(String, [String])], String, String)
 
 handlerSig :: GenParser Char a [(String, [String])]
 handlerSig =
@@ -67,7 +68,16 @@ forward =
       spaces
       char '.'
       spaces
-      return h
+      c <- optionMaybe handlerConstraint
+      return (h, c)
+
+handlerConstraint =
+  do
+    c <- paren
+    spaces
+    string "=>"
+    spaces
+    return c
 
 isSpaceNoNewline = satisfy (\c -> isSpace c && c /= '\n' && c /= '\r')
 
