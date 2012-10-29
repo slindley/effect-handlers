@@ -26,20 +26,11 @@ import DesugarHandlers
     polyClause _ DivideByZero k = return $ Left "Cannot divide by zero"
 |]
 
-
 type D a = forall h.(h `Handles` Divide) => Comp h a
 
 divUnchecked :: D a -> a
 divUnchecked comp =
   handlePure (handle comp DivideHandler (const return))
-
--- Looks like we could do with more help from the sugar! We should be
--- able to define return clauses and generate corresponding default
--- handling functions. Then we should have a concise way of writing
--- handler composition.
-
--- Perhaps (const return) should be a default for forwarding handlers
--- and (const id) for non-forwarding handlers.
 
 divChecked :: D a -> Either String a
 divChecked comp =
@@ -49,4 +40,35 @@ divChecked comp =
     (handle comp CheckZeroHandler (\_ x -> return (Right x)))
     DivideHandler (const return)) 
    ReportErrorHandler (const return))
+
+
+
+[operation|forall a.DivideByZero : a|]
+[operation|forall a.EndOfStream : a|]
+[operation|GetN : Int|]
+[operation|GetD : Int|]
+
+
+divs :: (h `Handles` GetN, h `Handles` GetD) => Comp h [Int]
+divs =
+  do
+    n <- getN
+    d <- getD
+    fmap ((:) (n `div` d)) divs
+    
+data StreamKind = Numerator | Denominator
+
+[handler|
+  DivReader a : [Int] -> [Int] -> a handles {GetN, GetD} where
+    clause (DivReader (n:ns) ds) GetN k = k (DivReader ns ds) n
+    clause (DivReader ns (d:ds)) GetD k = k (DivReader ns ds) d
+|]
+  
+readAndDivide ns ds = handle divs (DivReader ns ds) (const id)
+
+-- TODO: reinterpret this computation to support various kinds of
+-- error conditions / exception handling
+
+
+
 
