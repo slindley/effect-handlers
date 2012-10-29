@@ -76,23 +76,38 @@ result = manyTill anyChar (try (lookAhead (do {many1 space; string "handles" <|>
 clauses = many anyChar
 
 
+type OpDef = (Maybe String, String, [String], String)
+
 {- Operation definitions -}
 
-parseOpDef :: String -> (String, [String], String)
+parseOpDef :: String -> OpDef
 parseOpDef s =
     case parse opdef "" s of
       Right r -> r
 
-opdef :: GenParser Char a (String, [String], String)
+opdef :: GenParser Char a OpDef
 opdef =
     do
+      spaces
+      a <- optionMaybe forall
       name <- upperId
       spaces
       xs <- tyVars
       char ':'
       spaces
       sig <- many anyChar
-      return (name, xs, sig)
+      return (a, name, xs, sig)
+
+forall =
+    do
+      string "forall"
+      spaces
+      h <- lowerId
+      spaces
+      char '.'
+      spaces
+      return h
+
 
 {- Utilities -}
       

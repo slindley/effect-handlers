@@ -242,14 +242,10 @@ operation = QuasiQuoter { quoteExp = undefined, quotePat = undefined,
 opParser :: String -> Q [Dec]
 opParser s = makeOpDefs (parseOpDef s)
 
-makeOpDefs :: (String, [String], String) -> Q [Dec]
-makeOpDefs (name, ts, sig) = return [opType, returnInstance, opFun]
+makeOpDefs :: (Maybe String, String, [String], String) -> Q [Dec]
+makeOpDefs (poly, name, ts, sig) = return [opType, returnInstance, opFun]
     where
-      (poly, f) =
-          case parseType sig of
-            (ForallT [PlainTV a] [] f) -> (Just a, f)
-            (ForallT _ _ f)            -> undefined
-            f                          -> (Nothing, f)
+      f = parseType sig
 
       cname = mkName (let (c:cs) = name in toUpper(c) : cs)
       fname = mkName (let (c:cs) = name in toLower(c) : cs)
@@ -257,7 +253,7 @@ makeOpDefs (name, ts, sig) = return [opType, returnInstance, opFun]
       (lift, tyvars) =
           case poly of
             Just a ->
-              (mkName "polyDoOp", map mkName ts ++ [a])
+              (mkName "polyDoOp", map mkName ts ++ [mkName a])
             Nothing ->
               (mkName "doOp", map mkName ts)
       (args, result) = splitFunType f
