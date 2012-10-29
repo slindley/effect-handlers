@@ -40,6 +40,7 @@ type P a = forall h.(h `PolyHandles` LetLazy, h `PolyHandles` Force,
 type Q a = forall h.(h `PolyHandles` Dist, h `PolyHandles` Failure) => Comp h a
 
 data VC a = V a | C (PV a)
+--  deriving Show
 type PV a = [(Prob, VC a)]
 
 instance (Show a) => Show (VC a) where
@@ -83,11 +84,13 @@ reify comp =
 toss :: Prob -> Q Bool
 toss p = dist [(p, True), (1-p, False)]
 
+-- In a monadic setting we must make boolean short circuit evaluation
+-- explicit
 infixl 2 &&&
-(&&&) = liftM2 (&&)
+p &&& q = do {x <- p; if x then q else return False}
 
 infixl 1 |||
-(|||) = liftM2 (||)
+p ||| q = do {x <- p; if x then return True else q}
 
 grassModel :: Q Bool
 grassModel =
@@ -128,15 +131,15 @@ reflect choices =
       C pv -> reflect pv
       
 reflectUntil :: Int -> PV a -> Q' a
-reflectUntil 0 choices = stop choices
 reflectUntil n choices =
   do
     choice <- dist choices
     case choice of
       V a        -> return a
-      C choices' -> reflectUntil (n-1) choices'
+      C choices' -> if n == 0 then stop choice
+                    else reflectUntil (n-1) choices'
       
-[operation|forall r.Stop a : PV a -> r|]
+[operation|forall r.Stop a : VC a -> r|]
 
 --type Q' a = forall h.(DistFail h, h `PolyHandles` Stop a) => Comp h a
 type Q' a = forall h.(h `PolyHandles` Dist, h `PolyHandles` Failure, h `PolyHandles` Stop a) => Comp h a
@@ -174,16 +177,18 @@ exploreHandler comp =
 [handler|
   ExploreUntilHandler a : Prob -> Map.Map a Prob -> PV a -> (Map.Map a Prob, PV a)
     handles {Failure, Dist, Stop a} where
-      polyClause (ExploreUntilHandler _ m susp) Failure      k = (m, susp)
-      polyClause (ExploreUntilHandler s m susp) (Dist ps)    k =
-        foldl (\(m', susp') (p, v) -> k (ExploreUntilHandler (s*p) m' susp') v) (m, susp) ps
-      polyClause (ExploreUntilHandler s m susp) (Stop susp') k = (m, map (scale s) susp' ++ susp)
-        where
-          scale s (p, v) = (s*p, v)
+      polyClause (ExploreUntilHandler _ m susp) Failure   k = (m, susp)
+      polyClause (ExploreUntilHandler s m susp) (Dist ps) k =
+        foldl
+          (\(m', susp') (p, v) ->
+            k (ExploreUntilHandler (s*p) m' susp') v)
+          (m, susp)
+          ps
+      polyClause (ExploreUntilHandler s m susp) (Stop c)  k = (m, (s, c) : susp)
 |]
 
 explore' (Just i) comp = exploreUntilHandler (reflectUntil (i+1) comp)
-explore' Nothing comp = exploreUntilHandler (reflect comp)
+explore' Nothing  comp = exploreUntilHandler (reflect comp)
 
 exploreUntilHandler :: Ord a => Q' a -> PV a
 exploreUntilHandler comp =
@@ -192,9 +197,7 @@ exploreUntilHandler comp =
     (ans, susp) =
       handle comp (ExploreUntilHandler 1 Map.empty [])
       (\(ExploreUntilHandler s m susp) x ->
-        case Map.lookup x m of
-          Nothing -> (Map.insert x s m, susp)
-          Just p  -> (Map.insert x (s+p) m, susp))
+        (Map.insertWith (+) x s m, susp))
 
 
 (/==) = liftM2 (/=)
@@ -242,9 +245,11 @@ forceComp x m =
         return (unsafeCoerce v, m')
     Just (RightComp v) -> return (unsafeCoerce v, m)
 
-[handler|forward h.LetLazyHandler a : Int -> CompMap -> Comp h a handles {LetLazy} where
-  polyClause (LetLazyHandler x m) (LetLazy q) k =
-    k (LetLazyHandler (x+1) (Map.insert x (LeftComp q) m)) (LazyVar x)
+[handler|
+  forward h.(h `PolyHandles` Dist, h `PolyHandles` Failure) =>
+    LetLazyHandler a : Int -> CompMap -> Comp h a handles {LetLazy} where
+      polyClause (LetLazyHandler x m) (LetLazy q) k =
+        k (LetLazyHandler (x+1) (Map.insert x (LeftComp q) m)) (LazyVar x)
 |]
 -- we need to give the Force clause as an explicit type class
 -- instance, as it includes additional type class constraints
@@ -346,19 +351,19 @@ instance (h `Handles` Rand) => ImportanceHandler h a `PolyHandles` Failure where
 
 
 importanceSample :: (Ord a, h `Handles` Rand, h `PolyHandles` Dist) => Int -> Q a -> Comp h a
-importanceSample i comp = do {ps <- importance i 1.0 (reify0 comp); dist ps}
+importanceSample i comp = do {ps <- importance 1.0 (reify0 comp); dist ps}
   where
-    importance :: (Ord a, h `Handles` Rand) => Int -> Double -> PV a -> Comp h ([(Prob, a)])
-    importance i s pv' =
+    importance :: (Ord a, h `Handles` Rand) => Double -> PV a -> Comp h ([(Prob, a)])
+    importance s pv' =
       case cs of
         [] -> return vs
         _  -> 
           do
             r <- rand
-            let target = r * csum  
-            return (vs ++) `ap` importance i s' (accum 0 target cs)
+            let target = r * csum
+            return (vs ++) `ap` importance s' (accum 0 target cs)
       where
-        accum :: Double -> Double -> [(Prob, b)] -> b
+        accum :: Double -> Double -> [(Prob, PV b)] -> PV b
         accum x target []                          = undefined 
         accum x target ((y, v):l) | (x+y) > target = v
         accum x target ((y, v):l)                  = accum (x+y) target l
@@ -407,3 +412,14 @@ importanceSamples i comp n =
                         () <- dist l
                         importanceSample i comp))
 
+
+drunkCoin :: Q Bool
+drunkCoin =
+  do
+    t <- toss 0.5
+    lost <- toss 0.9
+    if lost then failure else return t
+    
+dcoinAnd :: Int -> Q Bool
+dcoinAnd 1 = drunkCoin
+dcoinAnd n =  drunkCoin &&& dcoinAnd (n-1)
