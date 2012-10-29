@@ -7,7 +7,9 @@
 
 {-# LANGUAGE GADTs, TypeFamilies, NoMonomorphismRestriction, RankNTypes,
     MultiParamTypeClasses, FlexibleInstances, OverlappingInstances,
-    FlexibleContexts, TypeOperators, ScopedTypeVariables, BangPatterns #-}
+    FlexibleContexts, TypeOperators, ScopedTypeVariables, BangPatterns, 
+    TemplateHaskell, QuasiQuotes
+  #-}
 
 import Control.Monad
 import OpenHandlers
