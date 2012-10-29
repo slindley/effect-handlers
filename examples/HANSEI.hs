@@ -29,7 +29,6 @@ normalise ps = map (\ (p, v) -> (p / m, v) ) ps
 
 type Prob = Double
 
---type P a = (h `Handles` Dice, h `Handles` Failure) => Comp h a
 type P a = forall h.(h `PolyHandles` LetLazy, h `PolyHandles` Force, h `PolyHandles` Dist, h `PolyHandles` Failure) => Comp h a
 type Q a = forall h.(h `PolyHandles` Dist, h `PolyHandles` Failure) => Comp h a
 
@@ -41,7 +40,8 @@ instance (Show a) => Show (VC a) where
   show (C a) = "?"
 
 [handler|forward h.PVHandler a : Comp h (PV a) handles {Dist, Failure} where
-  polyClause h (Dist ps) k = mapM (\(p, v) -> do {t <- k h v; return $ (p, C t)}) ps
+  polyClause h (Dist ps) k =
+    mapM (\(p, v) -> do {t <- k h v; return $ (p, C t)}) ps
   polyClause h Failure   k = return []
 |]
 
@@ -58,6 +58,11 @@ instance (Show a) => Show (VC a) where
 --   clause h op k = doOp op >>= k h
 -- instance (h `PolyHandles` op) => (PVHandler h a `PolyHandles` op) where
 --   polyClause h op k = polyDoOp op >>= k h
+
+reify0 :: Q a -> PV a
+reify0 comp =
+  handlePure (handle comp PVHandler (const (\x -> return [(1, V x)])))
+
 
 reify :: P a -> PV a
 reify comp =
@@ -114,7 +119,7 @@ explore maxdepth choices = Map.foldrWithKey (\k p l -> (p, V k):l) susp ans
           loop p depth down rest (ans, (pt * p, c):susp)
     (ans, susp) = loop 1.0 0 True choices (Map.empty, [])
     
-reflect :: PV a -> P a
+reflect :: PV a -> Q a
 reflect choices =
   do
     vc <- dist choices
@@ -122,30 +127,73 @@ reflect choices =
       V a -> return a
       C pv -> reflect pv
       
-reflectUntil :: Int -> PV a -> P (PV a)
-reflectUntil 0 choices = return choices
+reflectUntil :: Int -> PV a -> Q' a
+reflectUntil 0 choices = stop choices
 reflectUntil n choices =
   do
     choice <- dist choices
     case choice of
-      V a        -> return [(1, V a)]
+      V a        -> return a
       C choices' -> reflectUntil (n-1) choices'
       
-data ExploreHandler h a = ExploreHandler Prob (Map.Map a Prob) (PV a)
-type instance Result (ExploreHandler h a) = (Map.Map a Prob, PV a)
+--[operation|forall r.Stop a : PV a -> r|]
 
-instance ExploreHandler h a `PolyHandles` Failure where
-  polyClause (ExploreHandler _ m susp) Failure k = (m, susp)
-instance ExploreHandler h a `PolyHandles` Dist where
-  polyClause (ExploreHandler s m susp) (Dist ps) k = foldl (\(m', susp) (p, v) -> k (ExploreHandler (s*p) m' susp) v) (m, susp) ps
-  
+newtype Stop a r = Stop (PV a)
+type instance Return (Stop a r) = r
+stop x = polyDoOp (Stop x)
+
+type Q' a = forall h.(h `PolyHandles` Dist, h `PolyHandles` Failure, h `PolyHandles` Stop a) => Comp h a
+
+
+[handler|
+  ExploreHandler a : Prob -> Map.Map a Prob -> Map.Map a Prob
+    handles {Failure, Dist} where
+      polyClause (ExploreHandler _ m) Failure      k = m
+      polyClause (ExploreHandler s m) (Dist ps)    k =
+        foldl (\m' (p, v) -> k (ExploreHandler (s*p) m') v) m ps
+|]
+    
+-- data ExploreHandler h a = ExploreHandler Prob (Map.Map a Prob)
+-- type instance Result (ExploreHandler h a) = Map.Map a Prob
+
+-- instance ExploreHandler h a `PolyHandles` Failure where
+--   polyClause (ExploreHandler _ m) Failure k = m
+-- instance ExploreHandler h a `PolyHandles` Dist where
+--   polyClause (ExploreHandler s m) (Dist ps) k = foldl (\m' (p, v) -> k (ExploreHandler (s*p) m') v) m ps
+
 exploreHandler :: Ord a => Q a -> [(Prob, a)]
 exploreHandler comp =
   Map.foldrWithKey (\k p l -> (p, k):l) [] ans
   where
+    ans =
+      handle comp (ExploreHandler 1 Map.empty)
+      (\(ExploreHandler s m) x ->
+        case Map.lookup x m of
+          Nothing -> Map.insert x s m
+          Just p  -> Map.insert x (s+p) m)
+
+
+[handler|
+  ExploreUntilHandler a : Prob -> Map.Map a Prob -> PV a -> (Map.Map a Prob, PV a)
+    handles {Failure, Dist, Stop a} where
+      polyClause (ExploreUntilHandler _ m susp) Failure      k = (m, susp)
+      polyClause (ExploreUntilHandler s m susp) (Dist ps)    k =
+        foldl (\(m', susp') (p, v) -> k (ExploreUntilHandler (s*p) m' susp') v) (m, susp) ps
+      polyClause (ExploreUntilHandler s m susp) (Stop susp') k = (m, map (scale s) susp' ++ susp)
+        where
+          scale s (p, v) = (s*p, v)
+|]
+
+explore' (Just i) comp = exploreUntilHandler (reflectUntil (i+1) comp)
+explore' Nothing comp = exploreUntilHandler (reflect comp)
+
+exploreUntilHandler :: Ord a => Q' a -> PV a
+exploreUntilHandler comp =
+  Map.foldrWithKey (\k p l -> (p, V k):l) susp ans
+  where
     (ans, susp) =
-      handle comp (ExploreHandler 1 Map.empty [])
-      (\(ExploreHandler s m susp) x ->
+      handle comp (ExploreUntilHandler 1 Map.empty [])
+      (\(ExploreUntilHandler s m susp) x ->
         case Map.lookup x m of
           Nothing -> (Map.insert x s m, susp)
           Just p  -> (Map.insert x (s+p) m, susp))
@@ -153,17 +201,17 @@ exploreHandler comp =
 
 (/==) = liftM2 (/=)
 
-tossesXor :: Int -> P Bool
+tossesXor :: Int -> Q Bool
 tossesXor n = loop n
   where
-    loop :: Int -> P Bool
+    loop :: Int -> Q Bool
     loop n = if n == 1 then toss 0.5
              else toss 0.5 /== loop (n-1)
 
-tossesXor' :: Int -> P Bool
+tossesXor' :: Int -> Q Bool
 tossesXor' n = loop n
   where
-    loop :: Int -> P Bool
+    loop :: Int -> Q Bool
     loop n = if n == 1 then toss 0.5
              else
                do
