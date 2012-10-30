@@ -24,6 +24,19 @@ normalise ps = map (\ (p, v) -> (p / m, v) ) ps
   where
     m = mass ps
 
+undup :: Ord a => [(Prob, a)] -> [(Prob, a)]
+undup ps = Map.foldrWithKey (\k p l -> (p, k):l) [] m
+  where
+    m = foldl (\m (p, v) -> Map.insertWith (+) v p m) Map.empty ps
+  
+scale :: Double -> [(Prob, a)] -> [(Prob, a)]
+scale s = map (\(p, v) -> (p*s, v))
+
+accum :: Double -> Double -> [(Prob, a)] -> a
+accum x target []                          = undefined 
+accum x target ((y, v):l) | (x+y) > target = v
+accum x target ((y, v):l)                  = accum (x+y) target l
+
 [operation|forall a.Dist    : [(Prob, a)] -> a|]
 [operation|forall a.Failure : a|] 
 
@@ -187,6 +200,7 @@ exploreHandler comp =
       polyClause (ExploreUntilHandler s m susp) (Stop c)  k = (m, (s, c) : susp)
 |]
 
+explore' :: Ord a => Maybe Int -> PV a -> PV a
 explore' (Just i) comp = exploreUntilHandler (reflectUntil (i+1) comp)
 explore' Nothing  comp = exploreUntilHandler (reflect comp)
 
@@ -253,8 +267,7 @@ forceComp x m =
       polyClause (LetLazyHandler y m) (Force (LazyVar x)) k =
         do {(v, m') <- forceComp x m; k (LetLazyHandler y m') v}
 |]
--- we need to give the Force clause as an explicit type class
--- instance, as it includes additional type class constraints
+
 -- instance (h `PolyHandles` Dist, h `PolyHandles` Failure) => (LetLazyHandler h a `PolyHandles` Force) where
 --   polyClause (LetLazyHandler y m) (Force (LazyVar x)) k =
 --     do {(v, m') <- forceComp x m; k (LetLazyHandler y m') v}
@@ -314,13 +327,8 @@ allHeads n =
   polyClause h (Dist ps) k =
     do
       r <- rand
-      let target = r * mass ps          
+      let target = r * mass ps
       k h (accum 0 target ps)
-      where
-        accum :: forall b.Double -> Double -> [(Prob, b)] -> b
-        accum x target []                          = undefined 
-        accum x target ((y, v):l) | (x+y) > target = v
-        accum x target ((y, v):l)                  = accum (x+y) target l
 |]
 
 -- data SampleHandler h a = SampleHandler
@@ -333,11 +341,6 @@ allHeads n =
 --       r <- rand
 --       let target = r * mass ps          
 --       k h (accum 0 target ps)
---       where
---         accum :: Double -> Double -> [(Prob, b)] -> b
---         accum x target []                          = undefined 
---         accum x target ((y, v):l) | (x+y) > target = v
---         accum x target ((y, v):l)                  = accum (x+y) target l
 
 [handler|
   forward h.(h `Handles` Rand) =>
@@ -356,11 +359,6 @@ allHeads n =
 --       r <- rand
 --       let target = r * mass ps          
 --       k h (accum 0 target ps)
---       where
---         accum :: Double -> Double -> [(Prob, b)] -> b
---         accum x target []                          = undefined 
---         accum x target ((y, v):l) | (x+y) > target = v
---         accum x target ((y, v):l)                  = accum (x+y) target l
 
 
 -- instance (h `Handles` op) => (SampleHandler h a `Handles` op) where
@@ -370,39 +368,55 @@ allHeads n =
 
 
 importanceSample :: (Ord a, h `Handles` Rand, h `PolyHandles` Dist) => Int -> Q a -> Comp h a
-importanceSample i comp = do {ps <- importance 1.0 (reify0 comp); dist ps}
-  where
-    importance :: (Ord a, h `Handles` Rand) => Double -> PV a -> Comp h ([(Prob, a)])
-    importance s pv' =
-      case cs of
-        [] -> return vs
-        _  -> 
-          do
-            r <- rand
-            let target = r * csum
-            return (vs ++) `ap` importance s' (accum 0 target cs)
-      where
-        accum :: Double -> Double -> [(Prob, PV b)] -> PV b
-        accum x target []                          = undefined 
-        accum x target ((y, v):l) | (x+y) > target = v
-        accum x target ((y, v):l)                  = accum (x+y) target l
+importanceSample i comp =
+  do 
+    ps <- importance 1.0 (reify0 comp)
+    dist ps
+    where
+      importance :: (Ord a, h `Handles` Rand) => Double -> PV a -> Comp h ([(Prob, a)])
+      importance s pv' =
+        case cs of
+          [] -> return vs
+          _  -> 
+            do
+              r <- rand
+              let target = r * csum
+              fmap (vs ++) (importance (s*csum) (accum 0 target cs))
+        where
+          pv = explore' (Just i) pv'
+          vs  = [(s*p, v) | (p, V v) <- pv]
+          cs  = [(p, c) | (p, C c)  <- pv, length c /= 0]
+          csum = sum (map fst cs)
 
-        pv = explore (Just i) pv'
-        vs' = [(p, v) | (p, V v) <- pv]
-        cs =  [(p, c) | (p, C c) <- pv]
-        vsum = sum (map fst vs')
-        csum = sum (map fst cs)
-        vcsum = vsum + csum
-        factor = s / vcsum
-        s' = csum * factor
-        vs = [(p * factor, v) | (p, v) <- vs']
-    
+importance' :: (Ord a) => Int -> Double -> PV a -> IO ([(Prob, a)])
+importance' i s pv' =
+  case cs of
+    [] -> return vs
+    _  -> 
+      do
+        r <- getStdRandom random
+        let target = r * csum
+        fmap (vs ++) $ importance' i (s*csum) (accum 0 target cs)
+  where
+    pv = explore' (Just i) pv'
+    vs = [(s*p, v) | (p, V v) <- pv]
+    cs  = [(p, c) | (p, C c) <- pv, length c /= 0]
+    csum = sum (map fst cs)
+
+importanceSamples' :: (Ord a) => Int -> [(Prob, a)] -> Q a -> Int -> IO [(Prob, a)]
+importanceSamples' _ pv comp 0 = return $ undup pv
+importanceSamples' i pv comp n =
+  do
+    r <- importance' i 1.0 (reify0 comp)
+    importanceSamples' i (r ++ pv) comp (n-1)
+
+
 [handler|
   forward h.SampleLoop a : Comp (SampleLoop h a) a -> Comp h a handles {Failure} where
     polyClause h@(SampleLoop comp) Failure k = handle comp h (const return)
 |]
 
-sample :: Comp (SampleHandler h a) a -> Comp h a
+sample :: (h `Handles` Rand, h `PolyHandles` Failure) => Q a -> Comp h a 
 sample comp = handle comp SampleHandler (const return)
 
 sampleLoop :: Q a -> IO a
@@ -416,20 +430,20 @@ instance IOHandler a `Handles` Rand where
 
 samples :: Ord a => Q a -> Int -> IO [(Prob, a)]
 samples comp n =
-  handleIO (exploreHandler
-                    (do
-                        let l = take n (repeat (1, ()))
-                        () <- dist l
-                        sample comp))
+  (handleIO (exploreHandler
+             (do
+                 let l = take n (repeat (1, ()))
+                 () <- dist l
+                 sample comp)))
 
 
 importanceSamples :: Ord a => Int -> Q a -> Int -> IO [(Prob, a)]
 importanceSamples i comp n =
   handleIO (exploreHandler
-                    (do
-                        let l = take n (repeat (1, ()))
-                        () <- dist l
-                        importanceSample i comp))
+            (do
+                let l = take n (repeat (1/(fromIntegral n), ()))
+                dist l
+                importanceSample i comp))
 
 
 drunkCoin :: Q Bool
@@ -441,4 +455,4 @@ drunkCoin =
     
 dcoinAnd :: Int -> Q Bool
 dcoinAnd 1 = drunkCoin
-dcoinAnd n =  drunkCoin &&& dcoinAnd (n-1)
+dcoinAnd n = drunkCoin &&& dcoinAnd (n-1)
