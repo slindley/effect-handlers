@@ -32,7 +32,7 @@ type family Return op :: *
 type family Result h :: *
 
 class Handles h op where
-  clause :: h -> op -> (h -> Return op -> Result h) -> Result h
+  clause :: op -> h -> (h -> Return op -> Result h) -> Result h
 
 newtype Comp h a = Comp {handle :: h -> (h -> a -> Result h) -> Result h}
 
@@ -44,17 +44,17 @@ instance Functor (Comp h) where
   fmap f c = c >>= return . f
 
 doOp :: (h `Handles` op) => op -> Comp h (Return op)
-doOp op = Comp (\h k -> clause h op k)
+doOp op = Comp (\h k -> clause op h k)
 
 forward :: (h `Handles` op) => h' -> op -> (h' -> Return op -> Comp h a) -> Comp h a
 forward h op k = doOp op >>= k h
 
 -- polymorphic operations
 class (h `PolyHandles` op) where
-  polyClause :: h -> op a -> (h -> Return (op a) -> Result h) -> Result h
+  polyClause :: op a -> h -> (h -> Return (op a) -> Result h) -> Result h
 
 polyDoOp :: (h `PolyHandles` op) => op a -> Comp h (Return (op a))
-polyDoOp op = Comp (\h k -> polyClause h op k)
+polyDoOp op = Comp (\h k -> polyClause op h k)
 
 -- pure handlers
 data PureHandler a = PureHandler
@@ -73,8 +73,8 @@ handleIO comp = handle comp IOHandler (const return)
 [operation|Put s : s -> ()|]
 
 [handler|StateHandler s a : s -> a handles {Get s, Put s} where
-  clause (StateHandler s) Get k = k (StateHandler s) s
-  clause _ (Put s) k = k (StateHandler s) ()
+  clause Get (StateHandler s) k = k (StateHandler s) s
+  clause (Put s) _ k = k (StateHandler s) ()
 |]
 
 -- data Get s = Get

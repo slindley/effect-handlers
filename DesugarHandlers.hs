@@ -209,7 +209,7 @@ makeHandlerDef (h, name, ts, sig, r, cs) = [handlerType, resultInstance] ++ opCl
             cs -> [FunD clauseName cs]
 
       matchClause :: String -> Clause -> Bool
-      matchClause opName (Clause (h:p:_) _ _) = delve p
+      matchClause opName (Clause (p:_) _ _) = delve p
           where
             delve (ParensP p) = delve p
             delve (ConP op _) = opName == nameBase op
@@ -242,9 +242,9 @@ makeHandlerDef (h, name, ts, sig, r, cs) = [handlerType, resultInstance] ++ opCl
                 pre = [ClassP handles [VarT (head tyvars), op]]
                 (handles, decs) =
                     if poly then
-                        (polyHandles, parseDecs "polyClause h op k = polyDoOp op >>= k h")
+                        (polyHandles, parseDecs "polyClause op h k = polyDoOp op >>= k h")
                     else
-                        (monoHandles, parseDecs "clause h op k = doOp op >>= k h")    
+                        (monoHandles, parseDecs "clause op h k = doOp op >>= k h")    
 
 {- Operation definitions -}
 operation = QuasiQuoter { quoteExp = undefined, quotePat = undefined,

@@ -11,19 +11,21 @@ import DesugarHandlers
 [handler|
   forward h.
     DivideHandler a : Comp h a handles {Divide} where
-      clause h (Divide x y) k = k h (x `div` y)
+      clause (Divide x y) h k = k h (x `div` y)
 |]
 [handler|
   forward h.(h `PolyHandles` DivideByZero, h `Handles` Divide) =>
     CheckZeroHandler a : Comp h a handles {Divide} where
-      clause h (Divide x y) k = if y == 0 then
+      clause (Divide x y) h k = if y == 0 then
                                    divideByZero
                                 else
                                    (x `divide` y) >>= k h
+      -- Divide x y k -> ...
+      -- Return x     -> return x                                   
 |]
 [handler|
   forward h.ReportErrorHandler a : Comp h (Either String a) handles {DivideByZero} where
-    polyClause _ DivideByZero k = return $ Left "Cannot divide by zero"
+    polyClause DivideByZero _ k = return $ Left "Cannot divide by zero"
 |]
 
 
