@@ -168,7 +168,7 @@ handlerParser :: String -> Q [Dec]
 handlerParser s = return (makeHandlerDef (parseHandlerDef s))
 
 makeHandlerDef :: HandlerDef -> [Dec]
-makeHandlerDef (h, name, ts, sig, r, cs) = [handlerType, resultInstance] ++ opClauses ++ forwardClauses
+makeHandlerDef (h, name, ts, sig, r, cs) = [handlerType, resultInstance] ++ opClauses ++ forwardClauses ++ [handlerFun]
     where
       cname = mkName (let (c:cs) = name in toUpper(c) : cs)
       fname = mkName (let (c:cs) = name in toLower(c) : cs)
@@ -192,6 +192,22 @@ makeHandlerDef (h, name, ts, sig, r, cs) = [handlerType, resultInstance] ++ opCl
       ds = parseDecs cs
       opClauses = map clauseInstance sig
 
+      handlerFun =
+        FunD fname [Clause (handlerArgs ++ [VarP comp]) body retDecs]
+          where
+            xs = vars 0 args
+            vars i []       = []
+            vars i (_:args) = mkName ("x" ++ show i) : vars (i+1) args
+            ret = mkName "ret"
+            handle = mkName "handle"
+            handlerArgs = map VarP xs
+            comp = mkName "comp"
+            body = NormalB (appExp
+                            (VarE handle)
+                            [VarE comp,
+                             appExp (ConE cname) (map VarE xs),
+                             VarE ret])
+
       forwardClauses =
           case h of
             Nothing -> []
@@ -201,6 +217,10 @@ makeHandlerDef (h, name, ts, sig, r, cs) = [handlerType, resultInstance] ++ opCl
 
       monoDecs = filter (funName "clause") ds
       polyDecs = filter (funName "polyClause") ds
+      retDecs  =
+        case filter (funName "ret") ds of
+          []      -> error "No return clause"
+          retDecs -> retDecs
 
       lookupDecs :: String -> Dec -> [Dec]
       lookupDecs opName (d@(FunD clauseName clauses)) =

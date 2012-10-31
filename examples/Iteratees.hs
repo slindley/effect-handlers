@@ -32,6 +32,10 @@ getline = loop ""
 [handler|EvalHandler a : String -> a handles {GetC} where
   clause GetC (EvalHandler "")    k = k (EvalHandler "") Nothing
   clause GetC (EvalHandler (c:t)) k = k (EvalHandler t) (Just c)
+  ret _ x = x
+  -- GetC k ""    -> k Nothing  ""
+  -- GetC k (c:t) -> k (Just C) ""
+  -- Ret x _      -> x
 |]
 
 -- data EvalHandler a = EvalHandler String
@@ -42,8 +46,7 @@ getline = loop ""
 --   clause (EvalHandler (c:t)) GetC k = k (EvalHandler t) (Just c)
 
 eval :: String -> I a -> a
-eval s comp =
-    handle comp (EvalHandler s) (const id)
+eval s comp = evalHandler s comp
 
 getlines :: I [String]
 getlines = loop []

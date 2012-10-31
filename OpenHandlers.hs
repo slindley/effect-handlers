@@ -109,28 +109,29 @@ type instance Result (IOHandler a) = IO a
 handleIO :: Comp (IOHandler a) a -> IO a
 handleIO comp = handle comp IOHandler (const return)
 
--- [operation|Get s : s|]
--- [operation|Put s : s -> ()|]
--- 
--- [handler|StateHandler s a : s -> a handles {Get s, Put s} where
---   clause Get (StateHandler s) k = k (StateHandler s) s
---   clause (Put s) _ k = k (StateHandler s) ()
--- |]
+[operation|Get s : s|]
+[operation|Put s : s -> ()|]
 
-data Get s = Get
-type instance Return (Get s) = s
-get = doLocalOp Get
-
-newtype Put s = Put s
-type instance Return (Put s) = ()
-put s = doOp (Put s)
-
-newtype StateHandler s a = StateHandler s
-type instance Result (StateHandler s a) = a
-instance (StateHandler s a `Handles` Get s) where
+[handler|StateHandler s a : s -> a handles {Get s, Put s} where
   clause Get (StateHandler s) k = k (StateHandler s) s
-instance (StateHandler s a `Handles` Put s) where
   clause (Put s) _ k = k (StateHandler s) ()
+  ret _ x = x
+|]
+
+-- data Get s = Get
+-- type instance Return (Get s) = s
+-- get = doOp Get
+
+-- newtype Put s = Put s
+-- type instance Return (Put s) = ()
+-- put s = doOp (Put s)
+
+-- newtype StateHandler s a = StateHandler s
+-- type instance Result (StateHandler s a) = a
+-- instance (StateHandler s a `Handles` Get s) where
+--   clause Get (StateHandler s) k = k (StateHandler s) s
+-- instance (StateHandler s a `Handles` Put s) where
+--   clause (Put s) _ k = k (StateHandler s) ()
 
 countTest =
     do {n <- get;
