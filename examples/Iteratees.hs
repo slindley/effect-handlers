@@ -5,23 +5,23 @@
 -- 
 --   http://okmij.org/ftp/Haskell/Iteratee/describe.pdf
 
-{-# LANGUAGE GADTs, TypeFamilies, NoMonomorphismRestriction,
-             FlexibleContexts, TypeOperators, ScopedTypeVariables #-}
+{-# LANGUAGE GADTs, TypeFamilies, NoMonomorphismRestriction, RankNTypes,
+    MultiParamTypeClasses, FlexibleInstances, OverlappingInstances,
+    FlexibleContexts, TypeOperators, ScopedTypeVariables, BangPatterns, 
+    TemplateHaskell, QuasiQuotes
+  #-}
 
 import Control.Monad
-import Handlers
+import OpenHandlers
+import DesugarHandlers
 
 type LChar = Maybe Char
 
-data GetC = GetC
-instance Op GetC where
-  type Param GetC  = ()
-  type Return GetC = LChar
-getC = applyOp GetC ()
+[operation|GetC : LChar|]
 
-type I a = Comp (GetC, ()) a
+type I a = forall h.(h `Handles` GetC) => Comp h a
 
-getline :: (GetC `In` e) => Comp e String
+getline :: I String
 getline = loop ""
   where loop acc =
           do w <- getC
@@ -29,55 +29,90 @@ getline = loop ""
         check acc (Just c) | c /= '\n' = loop (c:acc)
         check acc _                    = return (reverse acc)
 
--- Oleg's implementation is based on control0-like behaviour.  We get
--- the same effect by moving the parameterisation of eval inside the
--- handler: the return type of the handler is String -> a.
---
--- Could we give a more direct translation of Oleg's code by working
--- out how to represent McBride handlers in terms of standard
--- handlers?
+[handler|EvalHandler a : String -> a handles {GetC} where
+  clause GetC (EvalHandler "")    k = k (EvalHandler "") Nothing
+  clause GetC (EvalHandler (c:t)) k = k (EvalHandler t) (Just c)
+|]
+
+-- data EvalHandler a = EvalHandler String
+-- type instance Result (EvalHandler a) = a
+
+-- instance (EvalHandler a `Handles` GetC) where
+--   clause (EvalHandler "")    GetC k = k (EvalHandler "") Nothing
+--   clause (EvalHandler (c:t)) GetC k = k (EvalHandler t) (Just c)
+
 eval :: String -> I a -> a
 eval s comp =
-  handle comp
-  (GetC |-> (\() k ->
-              \s -> 
-              case s of
-                ""    -> k Nothing ""
-                (c:t) -> k (Just c) t)
-   :<: Empty,
-   \x -> \s -> x)
-   s
+    handle comp (EvalHandler s) (const id)
 
-getlines :: (GetC `In` e) => Comp e [String]
+getlines :: I [String]
 getlines = loop []
   where loop acc = getline >>= check acc
         check acc "" = return (reverse acc)
         check acc l  = loop (l:acc)
         
+data EnStrHandler h a = EnStrHandler String
+type instance Result (EnStrHandler h a) = Comp h a
+
+instance (h `Handles` GetC) => (EnStrHandler h a `Handles` GetC) where
+  clause GetC (EnStrHandler "")    k = do {c <- getC; k (EnStrHandler "") c}
+  clause GetC (EnStrHandler (c:t)) k = k (EnStrHandler t) (Just c)
+
+instance (h `Handles` op) => (EnStrHandler h a `Handles` op) where
+    clause op h k = doOp op >>= k h
+
 en_str :: String -> I a -> I a
-en_str s comp =
-  handle comp
-  (GetC |-> (\() k ->
-              \s ->
-              case s of
-                ""    -> comp
-                (c:t) -> k (Just c) t) :<: Empty,
-   \x -> \s -> return x)
-   s
+en_str s comp = handle comp (EnStrHandler s) (const return)
 
-run :: I a -> a
-run comp =
-  handle comp
-  (GetC |-> (\n k -> k Nothing) :<: Empty,
-   id)
+-- RunHandler throws away any outstanding unhandled GetC applications
+data RunHandler h a = RunHandler
+type instance Result (RunHandler h a) = Comp h a
 
+instance (RunHandler h a `Handles` GetC) where
+  clause GetC h k = k h Nothing
 
+instance (h `Handles` op) => (RunHandler h a `Handles` op) where
+  clause op h k = doOp op >>= k h
+
+run :: I a -> Comp h a
+run comp = handle comp RunHandler (const return)
+
+-- like PureRunHandler but with no underlying handler
+data PureRunHandler a = PureRunHandler
+type instance Result (PureRunHandler a) = a
+
+instance (PureRunHandler a `Handles` GetC) where
+  clause GetC h k = k h Nothing
+  
+pureRun :: I a -> a
+pureRun comp = handle comp PureRunHandler (const id)
+
+data FlipHandler h a = (h `Handles` GetC) => FlipHandler (Bool, LChar, FlipHandler h a -> LChar -> Comp h a)
+type instance Result (FlipHandler h a) = Comp h a
+
+instance (FlipHandler h a `Handles` GetC) where
+  clause GetC (FlipHandler (True,  c, kr)) kl = do {kr (FlipHandler (False, c, kl)) c}
+  clause GetC (FlipHandler (False, _, kl)) kr = do {c <- getC; kl (FlipHandler (True, c, kr)) c}
+
+instance (h `Handles` op) => (FlipHandler h a `Handles` op) where
+  clause op h k = doOp op >>= k h
+
+-- synchronise two iteratees
 (<|) :: I a -> I a -> I a
-Ret x                 <| _                     = return x
-_                     <| Ret x                 = return x
-(App Here GetC () k1) <| (App Here GetC () k2) =
-  App makeWitness GetC () (\c -> k1 c <| k2 c)
+l <| r = handle l (FlipHandler (True, Nothing, \h' Nothing -> handle r h' (const return))) (const return)
 
+-- Roughly, we get the following behaviour from the synchronised
+-- traces of (l <| r):
+-- 
+--     ls1...GetC...ls2...GetC...  ...GetC...lsn
+--            ||           ||          ||
+--     rs1...GetC...rs2...GetC...  ...GetC...rsn
+--
+-- becomes:
+--
+--     ls1,rs1, GetC, ls2,rs2, GetC,...,GetC lsn,rsn
+
+-- fetch characters forever
 failure :: I a
 failure = getC >>= const failure
 
@@ -105,3 +140,30 @@ pGetline' = oneL >>= check
   where check (Just '\n') = return ""
         check Nothing     = return ""
         check (Just c)    = liftM (c:) pGetline'
+
+
+countI :: Char -> I Int
+countI c = count' 0
+  where
+    count' :: Int -> I Int
+    count' !n =
+      do
+        mc <- getC
+        case mc of
+            Nothing -> return n
+            Just c' -> count' (if c==c' then n+1 else n)
+            
+countH :: Char -> String -> Int
+countH c s = pureRun (en_str s (countI c))
+
+count :: Char -> String -> Int
+count c s = count' s 0
+  where
+    count' :: String -> Int -> Int
+    count' []      !n = n
+    count' (c':cs) !n = count' cs (if c==c' then n+1 else n)
+    
+test n = if n == 0 then ""
+         else "abc" ++ test (n-1)
+
+main = putStrLn (show $ countH 'a' (test 100000000))
