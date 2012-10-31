@@ -41,13 +41,14 @@ instance Monad (Comp h) where
   Comp c >>= f = Comp (\h k -> c h (\h' x -> handle (f x) h' k))
 
 instance Functor (Comp h) where
-  fmap f c = c >>= return . f
+  fmap f c = c >>= \x -> return (f x)
 
 doOp :: (h `Handles` op) => op -> Comp h (Return op)
 doOp op = Comp (\h k -> clause op h k)
+--doOp = Comp . clause
 
-forward :: (h `Handles` op) => h' -> op -> (h' -> Return op -> Comp h a) -> Comp h a
-forward h op k = doOp op >>= k h
+forward :: (h `Handles` op) => op -> h' -> (h' -> Return op -> Comp h a) -> Comp h a
+forward op h k = doOp op >>= k h
 
 -- polymorphic operations
 class (h `PolyHandles` op) where

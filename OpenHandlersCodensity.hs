@@ -13,7 +13,7 @@ type family Return op :: *
 type family Result h :: *
 
 class Handles h op where
-  clause :: h -> op -> (h -> Return op -> Result h) -> Result h
+  clause :: op -> h -> (h -> Return op -> Result h) -> Result h
 
 newtype Comp h a = Comp {unComp :: forall r . (a -> RawComp h r) -> RawComp h r}
 data RawComp h a where
@@ -31,7 +31,7 @@ instance Monad (Comp c) where
   return v     = Comp (\k -> k v)
   Comp c >>= f = Comp (\k' -> c (\x -> unComp (f x) k'))
 instance Functor (Comp h) where
-  fmap f c = c >>= return . f
+  fmap f c = c >>= \x -> return (f x)
 
 doOp :: (h `Handles` op) => op -> Comp h (Return op)
 doOp op = Comp (\k -> Do op k)
@@ -41,7 +41,7 @@ handle (Comp c) = handle' (c return)
   where
     handle' :: RawComp h a -> h -> (h -> a -> Result h) -> Result h
     handle' (Ret v) h r = r h v
-    handle' (Do op k) h r = clause h op (\h' v -> handle' (k v) h' r)
+    handle' (Do op k) h r = clause op h (\h' v -> handle' (k v) h' r)
 
 forward :: (Handles h op) => h' -> op -> (h' -> Return op -> Comp h a) -> Comp h a
 forward h op k = doOp op >>= k h
@@ -63,9 +63,9 @@ put s = doOp (Put s)
 newtype StateHandler s a = StateHandler s
 type instance Result (StateHandler s a) = a
 instance (StateHandler s a `Handles` Get s) where
-  clause (StateHandler s) Get k = k (StateHandler s) s
+  clause Get (StateHandler s) k = k (StateHandler s) s
 instance (StateHandler s a `Handles` Put s) where
-  clause _ (Put s) k = k (StateHandler s) ()
+  clause (Put s) _ k = k (StateHandler s) ()
 
 countTest =
     do {n <- get;

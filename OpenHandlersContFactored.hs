@@ -1,40 +1,29 @@
-{- Parameterised open handlers as a continuation monad -}
+{- Parameterised open handlers factored through the continuation monad -}
 
 {-# LANGUAGE TypeFamilies,
     MultiParamTypeClasses,
     TypeOperators,
-    NoMonomorphismRestriction  
+    NoMonomorphismRestriction, 
+    GeneralizedNewtypeDeriving
   #-}
 
 module OpenHandlersCont where
 
+import Control.Monad.Cont
+
 type family Return op :: *
 type family Result h :: *
 class h `Handles` op where clause :: op -> (Return op -> h -> Result h) -> h -> Result h
--- The type Comp h a is isomorphic to Cont (h -> Result h) -> h. We
--- don't actually use Cont as the extra abstraction leads to a
--- significant performance penalty.
-newtype Comp h a = Comp {handle :: (a -> h -> Result h) -> h -> Result h}
+newtype Comp h a = Comp {runComp :: Cont (h -> Result h) a}
+  deriving (Functor, Monad)
 doOp :: (h `Handles` op) => op -> Comp h (Return op)
-doOp op = Comp (\k h -> clause op k h)
-
--- Using this innocuous looking definition for doOp leads to more than
--- a two-times slow-down in some programs! Presumably this is an issue
--- involving the compilation of type classes.
---
--- doOp = Comp . clause
-
-instance Monad (Comp h) where
-  return v     = Comp (\k h -> k v h)
-  Comp c >>= f = Comp (\k h -> c (\x h' -> handle (f x) k h') h)
-
-instance Functor (Comp h) where
-  fmap f c = c >>= \x -> return (f x)
+doOp op = Comp (cont (\k h -> clause op k h))
+handle comp = runCont (runComp comp)
 
 -- polymorphic operations
 class h `PolyHandles` op where polyClause :: op a -> (Return (op a) -> h -> Result h) -> h -> Result h
 polyDoOp :: (h `PolyHandles` op) => op a -> Comp h (Return (op a))
-polyDoOp op = Comp (\k h -> polyClause op k h)
+polyDoOp op = Comp (cont (\k h -> polyClause op k h))
 
 -- pure handlers
 data PureHandler a = PureHandler
