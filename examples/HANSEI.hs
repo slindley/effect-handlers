@@ -61,7 +61,6 @@ instance (Show a) => Show (VC a) where
   polyClause Failure   h k = []
 |]
 
-
 --data PVHandler h a = PVHandler
 --type instance Result (PVHandler h a) = Comp h (PV a)
 
@@ -132,6 +131,7 @@ explore maxdepth choices = Map.foldrWithKey (\k p l -> (p, V k):l) susp ans
     (ans, susp) = loop 1.0 0 True choices (Map.empty, [])
     
 reflect :: PV a -> Q a
+reflect [] = failure
 reflect choices =
   do
     vc <- dist choices
@@ -140,6 +140,7 @@ reflect choices =
       C pv -> reflect pv
       
 reflectUntil :: Int -> PV a -> Q' a
+reflectUntil _ [] = failure
 reflectUntil n choices =
   do
     choice <- dist choices

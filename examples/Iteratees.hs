@@ -59,7 +59,7 @@ instance (h `Handles` GetC) => (EnStrHandler h a `Handles` GetC) where
   clause GetC (EnStrHandler (c:t)) k = k (EnStrHandler t) (Just c)
 
 instance (h `Handles` op) => (EnStrHandler h a `Handles` op) where
-    clause op h k = doOp op >>= k h
+    clause op h k = doOp op >>= (\x -> k h x)
 
 en_str :: String -> I a -> I a
 en_str s comp = handle comp (EnStrHandler s) (const return)
