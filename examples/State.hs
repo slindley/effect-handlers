@@ -1,5 +1,7 @@
 {-# LANGUAGE TypeFamilies, NoMonomorphismRestriction,
-             FlexibleContexts, TypeOperators #-}
+             FlexibleContexts, TypeOperators, ScopedTypeVariables,
+             GADTs, DataKinds
+ #-}
 
 import Handlers
 
@@ -41,3 +43,31 @@ handleStateWith h s comp =
        (getClause :<: putClause :<: h,
         \s -> return (\_ -> return s)))
     f s
+
+data Mode = Handle | Forward
+
+data Wrapped :: Mode -> * -> * where
+  Handled :: a -> Wrapped Handle a
+  Forwarded :: a -> Wrapped Forward a
+
+mcbrideState (s :: Int) comp =
+  handle comp
+  (((Get :: Get Int) |-> (\() k -> \mode ->
+    case mode of
+      Handle ->
+        mcbrideState s (k s Forward) Handle
+      Forward ->
+        do {(s :: Int) <- get (); k s Forward})) :<:
+   (Put |-> (\s k -> \mode ->
+    case mode of
+      Handle ->
+        mcbrideState s (k () Forward) Handle
+      Forward ->
+        do {put s; k () Forward})) :<: Empty,
+   \x mode -> return x)
+
+count :: Comp (Get Int, (Put Int, ())) ()
+count =
+    do {n <- get ();
+        if n == (0 :: Int) then return ()
+        else do {put (n-1); count}}

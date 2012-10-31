@@ -222,6 +222,65 @@ let rec mcbride_state s m =
          mcbride put (fun s k -> mcbride_state s k)]),
      (fun x -> x)) ()
 
+let rec mcbride_state' s m =
+  handle m
+    ((function
+      | `Handle ->
+        [local get     (fun ()   -> s);
+               put |-> (fun s  k -> mcbride_state' s (fun () -> k `Forward ()))]
+      | `Forward ->
+        []),
+     (fun x -> x)) `Handle
+
+let rec mcbride_state''' s m =
+  handle_plain m
+    ([plain get (fun () k -> 
+      function
+        | `Handle ->
+          mcbride_state''' s (fun () -> k s `Forward) `Handle
+        | `Forward ->
+          k (get ()) `Forward);
+      plain put (fun s k ->
+        function
+          | `Handle ->
+            mcbride_state''' s (fun () -> k () `Forward) `Handle
+          | `Forward ->
+            k (put s) `Forward)],
+     (fun x _ -> x))
+
+let rec mcbride_state'''' s m =
+  function
+    | `Handle ->
+      handle_plain m
+        ([plain get (fun () k h -> 
+            mcbride_state'''' s (fun () -> k s `Forward) h);
+          plain put (fun s k h ->
+            mcbride_state'''' s (fun () -> k () `Forward) h)],
+         (fun x _ -> x)) `Handle
+    | `Forward -> m () 
+ 
+
+
+
+let handle_mcbride m (op_clauses, return_clause) =
+  handle m
+    ((function
+      | `Handle   -> op_clauses
+      | `Forward -> []),
+     (fun x -> x)) `Handle
+
+let rec mcbride_state'' s m =
+  handle_mcbride m
+    ([local get     (fun ()  -> s);
+            put |-> (fun s k -> mcbride_state'' s (fun () -> k `Forward ()))],
+     (fun x -> x))
+
+let no_state m =
+  handle_plain m
+    ([plain get (fun p k -> k (get p));
+      plain put (fun p k -> k (put p))],
+     fun x -> x)
+
 let handle_state s m =
   handle_plain m
     ([plain get (fun () k s -> k s s);
@@ -263,6 +322,7 @@ let rec stupid n =
 let rec count : unit -> unit =
   fun () ->
     let n = get() in
+      print_int (stack_size());
       if n = 0 then ()
       else (put (n-1); count())
 
