@@ -5,16 +5,12 @@
 
 import Control.Monad
 import System.Random
-import System.IO.Unsafe
 import Unsafe.Coerce
 
 import qualified Data.Map.Strict as Map
 
 import OpenHandlers
 import DesugarHandlers
-
---randDouble :: () -> Double
---randDouble () = unsafePerformIO (getStdRandom random)
 
 mass :: [(Prob, a)] -> Double
 mass = sum . (map fst)
@@ -58,7 +54,7 @@ type PV a = [(Prob, VC a)]
 
 instance (Show a) => Show (VC a) where
   show (V a) = show a
-  show (C a) = "?"
+  show (C a) = ".."
 
 [handler|PVHandler a : PV a handles {Dist, Failure} where
   polyClause h (Dist ps) k = map (\(p, v) -> (p, C (k h v))) ps
@@ -432,8 +428,8 @@ samples :: Ord a => Q a -> Int -> IO [(Prob, a)]
 samples comp n =
   (handleIO (exploreHandler
              (do
-                 let l = take n (repeat (1, ()))
-                 () <- dist l
+                 let l = take n (repeat (1/(fromIntegral n), ()))
+                 dist l
                  sample comp)))
 
 
