@@ -6,15 +6,20 @@ import ParseCode
 
 {- Handler definitions -}
 
-type HandlerDef = (Maybe (String, Maybe String), String, [String], [(String, [String])], String, String)
+type HandlerDef = (Maybe (String, Maybe String),
+                   String,
+                   [String],
+                   ([(String, [String])], [(String, [String])]),
+                   String,
+                   String)
 
-handlerSig :: GenParser Char a [(String, [String])]
-handlerSig =
+handlerSig :: String -> GenParser Char a [(String, [String])]
+handlerSig s =
     do
       spaces
       sig <-
           (do
-            string "handles"
+            string s
             spaces
             char '{'
             sig <- opSig `sepBy1` char ','
@@ -52,13 +57,14 @@ handlerdef =
       char ':'
       spaces
       r <- result
-      sig <- handlerSig
+      sig <- handlerSig "handles"
+      polySig <- handlerSig "polyhandles"
       spaces
       string "where"
       many isSpaceNoNewline
       many newline
       cs <- clauses
-      return (h, name, ts, sig, r, cs)
+      return (h, name, ts, (sig, polySig), r, cs)
 
 forward =
     do
@@ -81,7 +87,7 @@ handlerConstraint =
 
 isSpaceNoNewline = satisfy (\c -> isSpace c && c /= '\n' && c /= '\r')
 
-result = manyTill anyChar (try (lookAhead (do {many1 space; string "handles" <|> string "where"})))
+result = manyTill anyChar (try (lookAhead (do {many1 space; string "handles" <|> string "polyhandles" <|> string "where"})))
 --result = manyTill anyChar (try (do {spaces; string "where"; many isSpaceNoNewline; many newline}))
 clauses = many anyChar
 

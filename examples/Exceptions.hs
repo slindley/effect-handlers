@@ -27,7 +27,7 @@ import DesugarHandlers
       ret x _ = return (Right x)
 |]
 [handler|
-  forward h.ReportErrorHandler a : Comp h (Either String a) handles {DivideByZero} where
+  forward h.ReportErrorHandler a : Comp h (Either String a) polyhandles {DivideByZero} where
     polyClause DivideByZero k _ = return $ Left "Cannot divide by zero"
     ret x _ = return x
 |]

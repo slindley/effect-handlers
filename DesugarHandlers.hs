@@ -168,7 +168,7 @@ handlerParser :: String -> Q [Dec]
 handlerParser s = return (makeHandlerDef (parseHandlerDef s))
 
 makeHandlerDef :: HandlerDef -> [Dec]
-makeHandlerDef (h, name, ts, sig, r, cs) = [handlerType, resultInstance] ++ opClauses ++ forwardClauses ++ [handlerFun]
+makeHandlerDef (h, name, ts, (sig, polySig), r, cs) = [handlerType, resultInstance] ++ opClauses ++ polyClauses ++ forwardClauses ++ [handlerFun]
     where
       cname = mkName (let (c:cs) = name in toUpper(c) : cs)
       fname = mkName (let (c:cs) = name in toLower(c) : cs)
@@ -190,7 +190,8 @@ makeHandlerDef (h, name, ts, sig, r, cs) = [handlerType, resultInstance] ++ opCl
           TySynInstD (mkName "Result")
                          [appType (ConT cname) (map VarT tyvars)] result
       ds = parseDecs cs
-      opClauses = map clauseInstance sig
+      opClauses = map (clauseInstance False) sig
+      polyClauses = map (clauseInstance True) polySig
 
       handlerFun =
         FunD fname [Clause (handlerArgs ++ [VarP comp]) body retDecs]
@@ -213,12 +214,11 @@ makeHandlerDef (h, name, ts, sig, r, cs) = [handlerType, resultInstance] ++ opCl
             Nothing -> []
             Just _  -> [forwardInstance False, forwardInstance True]
 
-      funName s (FunD f _) = nameBase f == s
+      funName p (FunD f _) = p(nameBase f)
 
-      monoDecs = filter (funName "clause") ds
-      polyDecs = filter (funName "polyClause") ds
+      opDecs = filter (funName (/= "ret")) ds
       retDecs  =
-        case filter (funName "ret") ds of
+        case filter (funName (== "ret")) ds of
           []      -> error "No return clause"
           retDecs -> retDecs
 
@@ -243,17 +243,12 @@ makeHandlerDef (h, name, ts, sig, r, cs) = [handlerType, resultInstance] ++ opCl
           Nothing -> []
           Just s | ForallT [] ctx _ <- parseType (s ++ " => ()") -> ctx
 
-      clauseInstance :: (String, [String]) -> Dec
-      clauseInstance (opName, tvs) = InstanceD ctx (AppT (AppT handles happ) op) decs
-          where              
+      clauseInstance :: Bool -> (String, [String]) -> Dec
+      clauseInstance poly (opName, tvs) = InstanceD ctx (AppT (AppT handles happ) op) decs
+          where
             op = ConT (mkName opName) `appType` map (VarT . mkName) tvs
-            monos = concat [lookupDecs opName d | d <- monoDecs]
-            polys = concat [lookupDecs opName d | d <- polyDecs]
-            (handles, decs) =
-                case (monos, polys) of
-                  ([], []) -> error $ "No clause for operation: " ++ opName
-                  (_, [])  -> (ConT monoHandles, monos)
-                  ([], _)  -> (ConT polyHandles, polys)
+            decs = concat [lookupDecs opName d | d <- opDecs]
+            handles = ConT (if poly then polyHandles else monoHandles)
 
       forwardInstance poly =
           InstanceD pre (AppT (AppT (ConT handles) happ) op) decs
@@ -340,6 +335,9 @@ parseType s =
 
 parseDecs :: String -> [Dec]
 parseDecs s | Right ds <- MetaParse.parseDecs s = ds
+
+parseExp :: String -> Exp
+parseExp s | Right e <- MetaParse.parseExp s = e
 
 appExp f []     = f
 appExp f (e:es) = appExp (AppE f e) es
