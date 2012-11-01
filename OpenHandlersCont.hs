@@ -18,11 +18,6 @@ newtype Comp h a = Comp {handle :: (a -> h -> Result h) -> h -> Result h}
 doOp :: (h `Handles` op) => op -> Comp h (Return op)
 doOp op = Comp (\k h -> clause op k h)
 
--- Using this innocuous looking definition for doOp leads to more than
--- a two-times slow-down in some programs! Presumably this is an issue
--- involving the compilation of type classes.
---
--- doOp = Comp . clause
 
 instance Monad (Comp h) where
   return v     = Comp (\k h -> k v h)
