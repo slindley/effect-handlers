@@ -205,8 +205,8 @@ makeHandlerDef (h, name, ts, sig, r, cs) = [handlerType, resultInstance] ++ opCl
             body = NormalB (appExp
                             (VarE handle)
                             [VarE comp,
-                             appExp (ConE cname) (map VarE xs),
-                             VarE ret])
+                             VarE ret,
+                             appExp (ConE cname) (map VarE xs)])
 
       forwardClauses =
           case h of
@@ -262,9 +262,9 @@ makeHandlerDef (h, name, ts, sig, r, cs) = [handlerType, resultInstance] ++ opCl
                 pre = [ClassP handles [VarT (head tyvars), op]]
                 (handles, decs) =
                     if poly then
-                        (polyHandles, parseDecs "polyClause op h k = polyDoOp op >>= k h")
+                        (polyHandles, parseDecs "polyClause op k h = polyDoOp op >>= (\\x -> k x h)")
                     else
-                        (monoHandles, parseDecs "clause op h k = doOp op >>= k h")    
+                        (monoHandles, parseDecs "clause op k h = doOp op >>= (\\x -> k x h)")    
 
 {- Operation definitions -}
 operation = QuasiQuoter { quoteExp = undefined, quotePat = undefined,

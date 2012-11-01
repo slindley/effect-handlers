@@ -9,7 +9,7 @@ import Unsafe.Coerce
 
 import qualified Data.Map.Strict as Map
 
-import OpenHandlers
+import Handlers
 import DesugarHandlers
 
 mass :: [(Prob, a)] -> Double
@@ -57,9 +57,9 @@ instance (Show a) => Show (VC a) where
   show (C a) = ".."
 
 [handler|PVHandler a : PV a handles {Dist, Failure} where
-  polyClause (Dist ps) h k = map (\(p, v) -> (p, C (k h v))) ps
-  polyClause Failure   h k = []
-  ret _ x = [(1, V x)]
+  polyClause (Dist ps) k h = map (\(p, v) -> (p, C (k v h))) ps
+  polyClause Failure   k h = []
+  ret x _ = [(1, V x)]
 |]
 
 --data PVHandler h a = PVHandler
@@ -157,10 +157,10 @@ type Q' a = forall h.(h `PolyHandles` Dist, h `PolyHandles` Failure, h `PolyHand
 [handler|
   forward h.ExploreHandler a : Prob -> Map.Map a Prob -> Comp h (Map.Map a Prob)
     handles {Failure, Dist} where
-      polyClause Failure   (ExploreHandler _ m) k = return m
-      polyClause (Dist ps) (ExploreHandler s m) k =
-        foldM (\m' (p, v) -> k (ExploreHandler (s*p) m') v) m ps
-      ret (ExploreHandler s m) x =
+      polyClause Failure   k (ExploreHandler _ m) = return m
+      polyClause (Dist ps) k (ExploreHandler s m) =
+        foldM (\m' (p, v) -> k v (ExploreHandler (s*p) m')) m ps
+      ret x (ExploreHandler s m) =
         return 
         (case Map.lookup x m of
           Nothing -> Map.insert x s m
@@ -182,15 +182,15 @@ exploreHandler' comp =
 [handler|
   ExploreUntilHandler a : Prob -> Map.Map a Prob -> PV a -> (Map.Map a Prob, PV a)
     handles {Failure, Dist, Stop a} where
-      polyClause Failure   (ExploreUntilHandler _ m susp) k = (m, susp)
-      polyClause (Dist ps) (ExploreUntilHandler s m susp) k =
+      polyClause Failure   k (ExploreUntilHandler _ m susp) = (m, susp)
+      polyClause (Dist ps) k (ExploreUntilHandler s m susp) =
         foldl
           (\(m', susp') (p, v) ->
-            k (ExploreUntilHandler (s*p) m' susp') v)
+            k v (ExploreUntilHandler (s*p) m' susp'))
           (m, susp)
           ps
-      polyClause (Stop c) (ExploreUntilHandler s m susp) k = (m, (s, c) : susp)
-      ret (ExploreUntilHandler s m susp) x =
+      polyClause (Stop c) k (ExploreUntilHandler s m susp) = (m, (s, c) : susp)
+      ret x (ExploreUntilHandler s m susp) =
         (Map.insertWith (+) x s m, susp)
 |]
 
@@ -252,28 +252,12 @@ forceComp x m =
 [handler|
   forward h.(h `PolyHandles` Dist, h `PolyHandles` Failure) =>
     LetLazyHandler a : Int -> CompMap -> Comp h a handles {LetLazy, Force} where
-      polyClause (LetLazy q) (LetLazyHandler x m) k =
-        k (LetLazyHandler (x+1) (Map.insert x (LeftComp q) m)) (LazyVar x)
-      polyClause (Force (LazyVar x)) (LetLazyHandler y m) k =
-        do {(v, m') <- forceComp x m; k (LetLazyHandler y m') v}
-      ret _ x = return x
+      polyClause (LetLazy q) k (LetLazyHandler x m) =
+        k (LazyVar x) (LetLazyHandler (x+1) (Map.insert x (LeftComp q) m))
+      polyClause (Force (LazyVar x)) k (LetLazyHandler y m) =
+        do {(v, m') <- forceComp x m; k v (LetLazyHandler y m')}
+      ret x _ = return x
 |]
-
--- instance (h `PolyHandles` Dist, h `PolyHandles` Failure) => (LetLazyHandler h a `PolyHandles` Force) where
---   polyClause (LetLazyHandler y m) (Force (LazyVar x)) k =
---     do {(v, m') <- forceComp x m; k (LetLazyHandler y m') v}
-
--- data LetLazyHandler h a = LetLazyHandler Int CompMap
--- type instance Result (LetLazyHandler h a) = Comp h a
-
--- instance (LetLazyHandler h a `PolyHandles` LetLazy) where
---   polyClause (LetLazyHandler x m) (LetLazy q) k =
---     k (LetLazyHandler (x+1) (Map.insert x (LeftComp q) m)) (LazyVar x)
-
--- instance (h `Handles` op) => (LetLazyHandler h a `Handles` op) where
---   clause h op k = doOp op >>= k h
--- instance (h `PolyHandles` op) => (LetLazyHandler h a `PolyHandles` op) where
---   polyClause h op k = polyDoOp op >>= k h
 
 letLazyHandler' :: P a -> Q a
 letLazyHandler' comp = letLazyHandler 0 Map.empty comp
@@ -315,12 +299,12 @@ allHeads n =
 [operation|Rand : Double|]
 
 [handler|forward h.(h `Handles` Rand) => SampleHandler a : Comp h a handles {Dist} where
-  polyClause (Dist ps) h k =
+  polyClause (Dist ps) k h =
     do
       r <- rand
       let target = r * mass ps
-      k h (accum 0 target ps)
-  ret _ x = return x
+      k (accum 0 target ps) h
+  ret x _ = return x
 |]
 
 
@@ -329,13 +313,13 @@ allHeads n =
   forward h.(h `Handles` Rand) =>
     ImportanceHandler a : Int -> Double -> Comp h ([(Prob, a)])
       handles {Dist,Failure} where
-        polyClause (Dist ps) h k =
+        polyClause (Dist ps) k h =
           do
             r <- rand
             let target = r * mass ps          
-            k h (accum 0 target ps)
-        polyClause Failure   h k = return []    
-        ret _ x = return [(1, x)]
+            k (accum 0 target ps) h
+        polyClause Failure k h = return []    
+        ret x _ = return [(1, x)]
 |]
 
 
@@ -385,8 +369,8 @@ importanceSamples' i pv comp n =
 
 [handler|
   forward h.SampleLoop a : Comp (SampleLoop h a) a -> Comp h a handles {Failure} where
-    polyClause Failure (SampleLoop comp) k = sampleLoop comp comp
-    ret _ x = return x
+    polyClause Failure k (SampleLoop comp) = sampleLoop comp comp
+    ret x _ = return x
 |]
 
 sample :: (h `Handles` Rand, h `PolyHandles` Failure) => Q a -> Comp h a 
@@ -396,10 +380,10 @@ sampleLoop' :: Q a -> IO a
 sampleLoop' comp = handleIO (sampleLoop (sample comp) (sample comp))
 
 instance IOHandler a `Handles` Rand where
-  clause Rand h k =
+  clause Rand k h =
     do
       r <- getStdRandom random
-      k h r
+      k r h
 
 samples :: Ord a => Q a -> Int -> IO [(Prob, a)]
 samples comp n =
