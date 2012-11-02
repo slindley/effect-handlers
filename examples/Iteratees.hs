@@ -87,14 +87,14 @@ run comp = runHandler comp
 pureRun :: I a -> a
 pureRun comp = pureRunHandler comp
 
+data FlipState h a = FlipState Bool LChar (LChar -> FlipState h a -> Comp h a)
 [handler|
   forward h.(h `Handles` GetC) =>
-    FlipHandler a : (Bool, LChar, (LChar -> FlipHandler h a -> Comp h a)) -> Comp h a handles {GetC} where
-      GetC     kl (True, c, kr)  -> do {kr c (FlipHandler (False, c, twiddle kl))}
-      GetC     kr (False, _, kl) -> do {c <- getC; kl c (FlipHandler (True, c, twiddle kr))}
-      Return x    _              -> return x
+    FlipHandler a : FlipState h a -> Comp h a handles {GetC} where
+      GetC     kl (FlipState True  c kr) -> do {kr c (FlipState False c kl)}
+      GetC     kr (FlipState False _ kl) -> do {c <- getC; kl c (FlipState True c kr)}
+      Return x    _                      -> return x
 |]
-twiddle k c (FlipHandler h) = k c h
 
 -- data FlipHandler h a = (h `Handles` GetC) => FlipHandler (Bool, LChar, LChar -> FlipHandler h a -> Comp h a)
 -- type instance Result (FlipHandler h a) = Comp h a
@@ -112,7 +112,7 @@ twiddle k c (FlipHandler h) = k c h
 
 -- synchronise two iteratees
 (<|) :: I a -> I a -> I a
-l <| r = flipHandler (True, Nothing, (\Nothing (FlipHandler h) -> flipHandler h r)) l
+l <| r = flipHandler (FlipState True Nothing (\Nothing s -> flipHandler s r)) l
 
 
 -- Roughly, we get the following behaviour from the synchronised
