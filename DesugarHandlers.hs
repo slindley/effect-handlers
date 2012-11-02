@@ -6,8 +6,6 @@
 
   * Generate type signatures for operation functions.
 
-  * Sugar for return clauses?
-
   * Sugar for handler extension?
 
   * McBride handlers?
@@ -174,13 +172,14 @@ makeHandlerDef (h, name, ts, (sig, polySig), r, cs) =
       cname = mkName (let (c:cs) = name in toUpper(c) : cs)
       fname = mkName (let (c:cs) = name in toLower(c) : cs)
 
-      (tyvars, constraint) =
-          (case h of
-             Just (h, Nothing) -> ([mkName h] ++ map mkName ts, Nothing)
-             Just (h, Just c)  -> ([mkName h] ++ map mkName ts, Just c)
-             Nothing           -> (map mkName ts, Nothing))
-
-      (args, result) = splitFunType (parseType r)
+      (args, result') = splitFunType (parseType r)
+      (tyvars, constraint, result) =
+        case h of
+          Just (h, c) -> ([h'] ++ map mkName ts, c, result)
+            where
+              h' = mkName h
+              result = appType (ConT (mkName "Comp")) [VarT h', result']
+          Nothing     -> (map mkName ts, Nothing, result')
       
       handlerType =
           DataD [] cname
@@ -291,103 +290,6 @@ makeHandlerDef (h, name, ts, (sig, polySig), r, cs) =
               where
                 (k:handlerArgs) = reverse (take (length args + 1) (reverse ps))
                 opArgs          = reverse (drop (length args + 1) (reverse ps))
-
-      forwardInstance poly =
-          InstanceD pre (AppT (AppT (ConT handles) happ) op) decs
-              where
-                op = VarT (mkName "op")
-                pre = [ClassP handles [VarT (head tyvars), op]]
-                (handles, decs) =
-                    if poly then
-                        (polyHandles, parseDecs "polyClause op k h = polyDoOp op >>= (\\x -> k x h)")
-                    else
-                        (monoHandles, parseDecs "clause op k h = doOp op >>= (\\x -> k x h)")    
-
-
-makeHandlerDef' :: HandlerDef -> [Dec]
-makeHandlerDef' (h, name, ts, (sig, polySig), r, cs) =
-  [handlerType, resultInstance] ++ opClauses ++ polyClauses ++ forwardClauses ++ [handlerFun]
-    where
-      cname = mkName (let (c:cs) = name in toUpper(c) : cs)
-      fname = mkName (let (c:cs) = name in toLower(c) : cs)
-
-      (tyvars, constraint) =
-          (case h of
-             Just (h, Nothing) -> ([mkName h] ++ map mkName ts, Nothing)
-             Just (h, Just c)  -> ([mkName h] ++ map mkName ts, Just c)
-             Nothing           -> (map mkName ts, Nothing))
-
-      (args, result) = splitFunType (parseType r)
-      
-      handlerType =
-          DataD [] cname
-                    (map PlainTV tyvars)
-                    [NormalC cname (map (\arg -> (NotStrict, arg)) args)]
-                    []
-      resultInstance =
-          TySynInstD (mkName "Result")
-                         [appType (ConT cname) (map VarT tyvars)] result
-      
-      ds = parseDecs cs
-      opClauses = map (clauseInstance False) sig
-      polyClauses = map (clauseInstance True) polySig
-
-      handlerFun =
-        FunD fname [Clause (handlerArgs ++ [VarP comp]) body retDecs]
-          where
-            xs = vars 0 args
-            vars i []       = []
-            vars i (_:args) = mkName ("x" ++ show i) : vars (i+1) args
-            ret = mkName "ret"
-            handle = mkName "handle"
-            handlerArgs = map VarP xs
-            comp = mkName "comp"
-            body = NormalB (appExp
-                            (VarE handle)
-                            [VarE comp,
-                             VarE ret,
-                             appExp (ConE cname) (map VarE xs)])
-
-      forwardClauses =
-          case h of
-            Nothing -> []
-            Just _  -> [forwardInstance False, forwardInstance True]
-
-      funName p (FunD f _) = p(nameBase f)
-
-      opDecs = filter (funName (/= "ret")) ds
-      retDecs  =
-        case filter (funName (== "ret")) ds of
-          []      -> error "No return clause"
-          retDecs -> retDecs
-
-      lookupDecs :: String -> Dec -> [Dec]
-      lookupDecs opName (d@(FunD clauseName clauses)) =
-          case filter (matchClause opName) clauses of
-            [] -> []
-            cs -> [FunD clauseName cs]
-
-      matchClause :: String -> Clause -> Bool
-      matchClause opName (Clause (p:_) _ _) = delve p
-          where
-            delve (ParensP p) = delve p
-            delve (ConP op _) = opName == nameBase op
-
-      monoHandles = mkName "Handles"
-      polyHandles = mkName "PolyHandles"
-      happ = ConT cname `appType` map VarT tyvars
-
-      ctx =
-        case constraint of
-          Nothing -> []
-          Just s | ForallT [] ctx _ <- parseType (s ++ " => ()") -> ctx
-
-      clauseInstance :: Bool -> (String, [String]) -> Dec
-      clauseInstance poly (opName, tvs) = InstanceD ctx (AppT (AppT handles happ) op) decs
-          where
-            op = ConT (mkName opName) `appType` map (VarT . mkName) tvs
-            decs = concat [lookupDecs opName d | d <- opDecs]
-            handles = ConT (if poly then polyHandles else monoHandles)
 
       forwardInstance poly =
           InstanceD pre (AppT (AppT (ConT handles) happ) op) decs

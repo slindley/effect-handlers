@@ -141,7 +141,7 @@ reflectUntil n choices =
 type Q' a = forall h.(h `PolyHandles` Dist, h `PolyHandles` Failure, h `PolyHandles` Stop a) => Comp h a
 
 [handler|
-  forward h.ExploreHandler a : Prob -> Map.Map a Prob -> Comp h (Map.Map a Prob)
+  forward h.ExploreHandler a : Prob -> Map.Map a Prob -> Map.Map a Prob
     polyhandles {Failure, Dist} where
       Failure  k _ m -> return m
       Dist ps  k s m -> foldM (\m' (p, v) -> k v (s*p) m') m ps
@@ -228,7 +228,7 @@ forceComp x m =
 
 [handler|
   forward h.(h `PolyHandles` Dist, h `PolyHandles` Failure) =>
-    LetLazyHandler a : Int -> CompMap -> Comp h a
+    LetLazyHandler a : Int -> CompMap -> a
       polyhandles {LetLazy, Force} where
         LetLazy q         k x m ->
           k (LazyVar x) (x+1) (Map.insert x (LeftComp q) m)
@@ -277,7 +277,7 @@ allHeads n =
 [operation|Rand : Double|]
 
 [handler|
-  forward h.(h `Handles` Rand) => SampleHandler a : Comp h a
+  forward h.(h `Handles` Rand) => SampleHandler a : a
     polyhandles {Dist} where
       Dist ps  k ->
         do
@@ -291,7 +291,7 @@ allHeads n =
 -- what's this for?
 [handler|
   forward h.(h `Handles` Rand) =>
-    ImportanceHandler a : Int -> Double -> Comp h ([(Prob, a)])
+    ImportanceHandler a : Int -> Double -> [(Prob, a)]
       polyhandles {Dist,Failure} where
         Dist ps k n s ->
           do
@@ -348,9 +348,11 @@ importanceSamples' i pv comp n =
 
 
 [handler|
-  forward h.SampleLoop a : Comp (SampleLoop h a) a -> Comp h a polyhandles {Failure} where
-    Failure  k comp -> sampleLoop comp comp
-    Return x   _    -> return x
+  forward h.
+    SampleLoop a : Comp (SampleLoop h a) a -> a
+      polyhandles {Failure} where
+        Failure  k comp -> sampleLoop comp comp
+        Return x   _    -> return x
 |]
 
 sample :: (h `Handles` Rand, h `PolyHandles` Failure) => Q a -> Comp h a 

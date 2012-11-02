@@ -10,14 +10,19 @@ module Handlers where
 
 type family Return op :: *
 type family Result h :: *
-class h `Handles` op where clause :: op -> (Return op -> h -> Result h) -> h -> Result h
+class h `Handles` op where
+  clause :: op -> (Return op -> h -> Result h) -> h -> Result h
 -- The type Comp h a is isomorphic to Cont (h -> Result h) -> h. We
 -- don't actually use Cont as the extra abstraction leads to a
 -- significant performance penalty.
 newtype Comp h a = Comp {handle :: (a -> h -> Result h) -> h -> Result h}
 doOp :: (h `Handles` op) => op -> Comp h (Return op)
 doOp op = Comp (\k h -> clause op k h)
-
+-- We are careful not to use this equivalent implementation because it
+-- leads to an enormous slow-down. Pointless programming in GHC is
+-- dangerous!
+--
+-- doOp = Comp . clause
 
 instance Monad (Comp h) where
   return v     = Comp (\k h -> k v h)
