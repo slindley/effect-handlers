@@ -30,12 +30,9 @@ getline = loop ""
         check acc _                    = return (reverse acc)
 
 [handler|EvalHandler a : String -> a handles {GetC} where
-  clause GetC k (EvalHandler "")    = k Nothing (EvalHandler "")
-  clause GetC k (EvalHandler (c:t)) = k (Just c) (EvalHandler t)
-  ret x _ = x
-  -- GetC k ""    -> k Nothing  ""
-  -- GetC k (c:t) -> k (Just C) ""
-  -- Ret x _      -> x
+  GetC     k ""    -> k Nothing ""
+  GetC     k (c:t) -> k (Just c) t
+  Return x   _     -> x
 |]
 
 eval :: String -> I a -> a
@@ -46,57 +43,77 @@ getlines = loop []
   where loop acc = getline >>= check acc
         check acc "" = return (reverse acc)
         check acc l  = loop (l:acc)
-        
-data EnStrHandler h a = EnStrHandler String
-type instance Result (EnStrHandler h a) = Comp h a
 
-instance (h `Handles` GetC) => (EnStrHandler h a `Handles` GetC) where
-  clause GetC k (EnStrHandler "")    = do {c <- getC; k c (EnStrHandler "")}
-  clause GetC k (EnStrHandler (c:t)) = k (Just c) (EnStrHandler t)
-
-instance (h `Handles` op) => (EnStrHandler h a `Handles` op) where
-    clause op k h = doOp op >>= (\x -> k x h)
+[handler|
+  forward h.(h `Handles` GetC) =>
+    EnStrHandler a : String -> Comp h a handles {GetC} where
+      GetC     k ""    -> do {c <- getC; k c ""}
+      GetC     k (c:t) -> k (Just c) t
+      Return x   _     -> return x
+|]
 
 en_str :: String -> I a -> I a
-en_str s comp = handle comp (\x _ -> return x) (EnStrHandler s)
+en_str s comp = enStrHandler s comp
+
+-- data EnStrHandler h a = EnStrHandler String
+-- type instance Result (EnStrHandler h a) = Comp h a
+
+-- instance (h `Handles` GetC) => (EnStrHandler h a `Handles` GetC) where
+--   clause GetC k (EnStrHandler "")    = do {c <- getC; k c (EnStrHandler "")}
+--   clause GetC k (EnStrHandler (c:t)) = k (Just c) (EnStrHandler t)
+
+-- instance (h `Handles` op) => (EnStrHandler h a `Handles` op) where
+--     clause op k h = doOp op >>= (\x -> k x h)
+
+-- en_str :: String -> I a -> I a
+-- en_str s comp = handle comp (\x _ -> return x) (EnStrHandler s)
 
 -- RunHandler throws away any outstanding unhandled GetC applications
-data RunHandler h a = RunHandler
-type instance Result (RunHandler h a) = Comp h a
-
-instance (RunHandler h a `Handles` GetC) where
-  clause GetC k h = k Nothing h
-
-instance (h `Handles` op) => (RunHandler h a `Handles` op) where
-  clause op k h = doOp op >>= (\x -> k x h)
+[handler|
+  forward h.RunHandler a : Comp h a handles {GetC} where
+    GetC     k -> k Nothing
+    Return x   -> return x
+|]
 
 run :: I a -> Comp h a
-run comp = handle comp (\x _ -> return x) RunHandler
+run comp = runHandler comp
 
--- like PureRunHandler but with no underlying handler
-data PureRunHandler a = PureRunHandler
-type instance Result (PureRunHandler a) = a
-
-instance (PureRunHandler a `Handles` GetC) where
-  clause GetC k h = k Nothing h
-  
+-- like RunHandler but with no underlying handler
+[handler|
+  PureRunHandler a : a handles {GetC} where
+    GetC   k -> k Nothing
+    Return x -> x
+|]
 pureRun :: I a -> a
-pureRun comp = handle comp (\x _ -> x) PureRunHandler
+pureRun comp = pureRunHandler comp
 
-data FlipHandler h a = (h `Handles` GetC) => FlipHandler (Bool, LChar, LChar -> FlipHandler h a -> Comp h a)
-type instance Result (FlipHandler h a) = Comp h a
+[handler|
+  forward h.(h `Handles` GetC) =>
+    FlipHandler a : (Bool, LChar, (LChar -> FlipHandler h a -> Comp h a)) -> Comp h a handles {GetC} where
+      GetC     kl (True, c, kr)  -> do {kr c (FlipHandler (False, c, twiddle kl))}
+      GetC     kr (False, _, kl) -> do {c <- getC; kl c (FlipHandler (True, c, twiddle kr))}
+      Return x    _              -> return x
+|]
+twiddle k c (FlipHandler h) = k c h
 
-instance (FlipHandler h a `Handles` GetC) where
-  clause GetC kl (FlipHandler (True,  c, kr)) = do {kr c (FlipHandler (False, c, kl))}
-  clause GetC kr (FlipHandler (False, _, kl)) = do {c <- getC; kl c (FlipHandler (True, c, kr))}
+-- data FlipHandler h a = (h `Handles` GetC) => FlipHandler (Bool, LChar, LChar -> FlipHandler h a -> Comp h a)
+-- type instance Result (FlipHandler h a) = Comp h a
 
-instance (h `Handles` op) => (FlipHandler h a `Handles` op) where
-  clause op k h = doOp op >>= (\x -> k x h)
+-- instance (FlipHandler h a `Handles` GetC) where
+--   clause GetC kl (FlipHandler (True,  c, kr)) = do {kr c (FlipHandler (False, c, kl))}
+--   clause GetC kr (FlipHandler (False, _, kl)) = do {c <- getC; kl c (FlipHandler (True, c, kr))}
+
+-- instance (h `Handles` op) => (FlipHandler h a `Handles` op) where
+--   clause op k h = doOp op >>= (\x -> k x h)
+
+-- l <| r = handle l (\x _ -> return x)
+--          (FlipHandler True Nothing (\Nothing h' -> handle r (\x _ -> return x) h'))
+
 
 -- synchronise two iteratees
 (<|) :: I a -> I a -> I a
-l <| r = handle l (\x _ -> return x)
-         (FlipHandler (True, Nothing, \Nothing h' -> handle r (\x _ -> return x) h'))
+l <| r = flipHandler (True, Nothing, (\Nothing (FlipHandler h) -> flipHandler h r)) l
+
 
 -- Roughly, we get the following behaviour from the synchronised
 -- traces of (l <| r):

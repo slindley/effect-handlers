@@ -26,7 +26,7 @@ undup ps = Map.foldrWithKey (\k p l -> (p, k):l) [] m
     m = foldl (\m (p, v) -> Map.insertWith (+) v p m) Map.empty ps
   
 scale :: Double -> [(Prob, a)] -> [(Prob, a)]
-scale s = map (\(p, v) -> (p*s, v))
+scale s = map (\(p, v) -> (s*p, v))
 
 accum :: Double -> Double -> [(Prob, a)] -> a
 accum x target []                          = undefined 
@@ -57,9 +57,9 @@ instance (Show a) => Show (VC a) where
   show (C a) = ".."
 
 [handler|PVHandler a : PV a polyhandles {Dist, Failure} where
-  polyClause (Dist ps) k h = map (\(p, v) -> (p, C (k v h))) ps
-  polyClause Failure   k h = []
-  ret x _ = [(1, V x)]
+  Dist ps  k -> map (\(p, v) -> (p, C (k v))) ps
+  Failure  k -> []
+  Return x   -> [(1, V x)]
 |]
 
 reify0 :: Q a -> PV a
@@ -74,7 +74,7 @@ reify comp = pVHandler (letLazyHandler' comp)
 --   do
 --     i <- dice (map fst l)
 --     return $ snd (l !! i)
-    
+ 
 toss :: Prob -> Q Bool
 toss p = dist [(p, True), (1-p, False)]
 
@@ -115,7 +115,7 @@ explore maxdepth choices = Map.foldrWithKey (\k p l -> (p, V k):l) susp ans
         (pt, c):rest ->
           loop p depth down rest (ans, (pt * p, c):susp)
     (ans, susp) = loop 1.0 0 True choices (Map.empty, [])
-    
+ 
 reflect :: PV a -> Q a
 reflect [] = failure
 reflect choices =
@@ -124,7 +124,7 @@ reflect choices =
     case vc of
       V a -> return a
       C pv -> reflect pv
-      
+   
 reflectUntil :: Int -> PV a -> Q' a
 reflectUntil _ [] = failure
 reflectUntil n choices =
@@ -134,20 +134,18 @@ reflectUntil n choices =
       V a        -> return a
       C choices' -> if n == 0 then stop choice
                     else reflectUntil (n-1) choices'
-      
+   
 [operation|forall r.Stop a : VC a -> r|]
 
 --type Q' a = forall h.(DistFail h, h `PolyHandles` Stop a) => Comp h a
 type Q' a = forall h.(h `PolyHandles` Dist, h `PolyHandles` Failure, h `PolyHandles` Stop a) => Comp h a
 
-
 [handler|
   forward h.ExploreHandler a : Prob -> Map.Map a Prob -> Comp h (Map.Map a Prob)
     polyhandles {Failure, Dist} where
-      polyClause Failure   k (ExploreHandler _ m) = return m
-      polyClause (Dist ps) k (ExploreHandler s m) =
-        foldM (\m' (p, v) -> k v (ExploreHandler (s*p) m')) m ps
-      ret x (ExploreHandler s m) =
+      Failure  k _ m -> return m
+      Dist ps  k s m -> foldM (\m' (p, v) -> k v (s*p) m') m ps
+      Return x   s m ->
         return 
         (case Map.lookup x m of
           Nothing -> Map.insert x s m
@@ -161,15 +159,15 @@ exploreHandler' comp =
 [handler|
   ExploreUntilHandler a : Prob -> Map.Map a Prob -> PV a -> (Map.Map a Prob, PV a)
     polyhandles {Failure, Dist, Stop a} where
-      polyClause Failure   k (ExploreUntilHandler _ m susp) = (m, susp)
-      polyClause (Dist ps) k (ExploreUntilHandler s m susp) =
+      Failure   k _ m susp -> (m, susp)
+      Dist ps   k s m susp ->
         foldl
           (\(m', susp') (p, v) ->
-            k v (ExploreUntilHandler (s*p) m' susp'))
+            k v (s*p) m' susp')
           (m, susp)
           ps
-      polyClause (Stop c) k (ExploreUntilHandler s m susp) = (m, (s, c) : susp)
-      ret x (ExploreUntilHandler s m susp) =
+      Stop c    k s m susp -> (m, (s, c) : susp)
+      Return x    s m susp ->
         (Map.insertWith (+) x s m, susp)
 |]
 
@@ -232,11 +230,11 @@ forceComp x m =
   forward h.(h `PolyHandles` Dist, h `PolyHandles` Failure) =>
     LetLazyHandler a : Int -> CompMap -> Comp h a
       polyhandles {LetLazy, Force} where
-        polyClause (LetLazy q) k (LetLazyHandler x m) =
-          k (LazyVar x) (LetLazyHandler (x+1) (Map.insert x (LeftComp q) m))
-        polyClause (Force (LazyVar x)) k (LetLazyHandler y m) =
-          do {(v, m') <- forceComp x m; k v (LetLazyHandler y m')}
-        ret x _ = return x
+        LetLazy q         k x m ->
+          k (LazyVar x) (x+1) (Map.insert x (LeftComp q) m)
+        Force (LazyVar x) k y m ->
+          do {(v, m') <- forceComp x m; k v y m'}
+        Return x            _ _ -> return x
 |]
 
 letLazyHandler' :: P a -> Q a
@@ -249,7 +247,7 @@ tosses' n =
     v <- toss 0.5
     vs <- tosses' (n-1)
     return (v : vs)
-    
+ 
 allHeads' :: Int -> Q Bool
 allHeads' n =
   do
@@ -263,7 +261,7 @@ tosses n =
     v <- letLazy (toss 0.5)
     vs <- tosses (n-1)
     return (v : vs)
-    
+ 
 allHeads :: Int -> P Bool
 allHeads n =
   do
@@ -281,12 +279,12 @@ allHeads n =
 [handler|
   forward h.(h `Handles` Rand) => SampleHandler a : Comp h a
     polyhandles {Dist} where
-      polyClause (Dist ps) k h =
+      Dist ps  k ->
         do
           r <- rand
           let target = r * mass ps
-          k (accum 0 target ps) h
-      ret x _ = return x
+          k (accum 0 target ps)
+      Return x   -> return x
 |]
 
 
@@ -295,13 +293,13 @@ allHeads n =
   forward h.(h `Handles` Rand) =>
     ImportanceHandler a : Int -> Double -> Comp h ([(Prob, a)])
       polyhandles {Dist,Failure} where
-        polyClause (Dist ps) k h =
+        Dist ps k n s ->
           do
             r <- rand
             let target = r * mass ps          
-            k (accum 0 target ps) h
-        polyClause Failure k h = return []    
-        ret x _ = return [(1, x)]
+            k (accum 0 target ps) n s
+        Failure k _ _ -> return []    
+        Return x  _ _ -> return [(1, x)]
 |]
 
 
@@ -351,8 +349,8 @@ importanceSamples' i pv comp n =
 
 [handler|
   forward h.SampleLoop a : Comp (SampleLoop h a) a -> Comp h a polyhandles {Failure} where
-    polyClause Failure k (SampleLoop comp) = sampleLoop comp comp
-    ret x _ = return x
+    Failure  k comp -> sampleLoop comp comp
+    Return x   _    -> return x
 |]
 
 sample :: (h `Handles` Rand, h `PolyHandles` Failure) => Q a -> Comp h a 
@@ -391,7 +389,7 @@ drunkCoin =
     t <- toss 0.5
     lost <- toss 0.9
     if lost then failure else return t
-    
+ 
 dcoinAnd :: Int -> Q Bool
 dcoinAnd 1 = drunkCoin
 dcoinAnd n = drunkCoin &&& dcoinAnd (n-1)

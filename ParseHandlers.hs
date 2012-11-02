@@ -4,6 +4,12 @@ import Text.ParserCombinators.Parsec
 import Data.Char (isSpace)
 import ParseCode
 
+-- we could use the applicative interface...
+--
+-- I'm not convinced that it makes things clearer though
+--
+--import Control.Applicative ((<*>), (<*), (*>), (<$>), (<$))
+
 {- Handler definitions -}
 
 type HandlerDef = (Maybe (String, Maybe String),

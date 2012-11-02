@@ -12,24 +12,22 @@ import DesugarHandlers
 [handler|
   forward h.
     DivideHandler a : Comp h a handles {Divide} where
-      clause (Divide x y) k h = k (x `div` y) h
-      ret x _ = return x
-      -- Divide x y k -> k (x `div` y)
-      -- Return x     -> return x                                   
+      Divide x y k -> k (x `div` y)
+      Return x     -> return x                                   
 |]    
 [handler|
   forward h.(h `PolyHandles` DivideByZero, h `Handles` Divide) =>
     CheckZeroHandler a : Comp h a handles {Divide} where
-      clause (Divide x y) k h = if y == 0 then
-                                   divideByZero
-                                else
-                                   (x `divide` y) >>= (\x -> k x h)
-      ret x _ = return (Right x)
+      Divide x y k -> if y == 0 then
+                        divideByZero
+                      else
+                        (x `divide` y) >>= (\x -> k x)
+      Return x     -> return (Right x)
 |]
 [handler|
   forward h.ReportErrorHandler a : Comp h (Either String a) polyhandles {DivideByZero} where
-    polyClause DivideByZero k _ = return $ Left "Cannot divide by zero"
-    ret x _ = return x
+    DivideByZero k -> return $ Left "Cannot divide by zero"
+    Return x       -> return x
 |]
 
 
