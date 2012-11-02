@@ -1,10 +1,10 @@
 {- TODO:
 
+  * Generate type signatures for handler functions.
+
   * Check that there are no redundant clauses in handlers (those that
     don't match up with any of the declared operations are just
     ignored).
-
-  * Generate type signatures for operation functions.
 
   * Sugar for handler extension?
 
@@ -24,23 +24,21 @@
 
     data Get s = Get
     type instance Return (Get s) = s
+    get :: forall h s.(h `Handles` Get) => Comp h s
     get = doOp Get
 
     newtype Put s = Put s
     type instance Return (Put s) = ()
+    put :: forall h s :: (h `Handles` Put) => s -> Comp h ()
     put s = doOp (Put s)
-
-  If one of the parameters to an operation has a fancy type then it is
-  sometimes necessary to add a type annotation on the generated
-  operation function. This is perfectly possible. We might improve
-  usability by outputting a type-signature (as it should always be
-  fully known anyway).
 
   A non-forwarding state handler:
 
-    [handler|StateHandler s a : s -> a handles {Get s, Put s} where
-      clause (StateHandler s) Get k = k (StateHandler s) s
-      clause _ (Put s) k = k (StateHandler s) ()
+    [handler|
+      StateHandler s a : s -> a handles {Get s, Put s} where
+        Get      k s -> k s s
+        Put s    k _ -> k () s
+        Return x   _ -> x
     |]
 
   This elaborates to:
@@ -48,15 +46,22 @@
     newtype StateHandler s a = StateHandler s
     type instance Result (StateHandler s a) = a
     instance (StateHandler s a `Handles` Get s) where
-      clause (StateHandler s) Get k = k (StateHandler s) s
+      clause Get     k' (StateHandler s) = k s s
+        where
+          k v s = k' v (StateHandler s)
     instance (StateHandler s a `Handles` Put s) where
-      clause _ (Put s) k = k (StateHandler s) ()
+      clause (Put s) k' _                = k () s
+        where
+          k v s = k' v (StateHandler s)
+    stateHandler s comp = handle comp (\x _ -> x) (StateHandler s)
 
   A forwarding state handler:
 
-    [handler|forward h.FStateHandler s a : s -> a handles {Get s, Put s} where
-      clause (FStateHandler s) Get k = k (FStateHandler s) s
-      clause _ (Put s) k = k (FStateHandler s) ()
+    [handler|
+      forward h.FStateHandler s a : s -> a handles {Get s, Put s} where
+        Get      k s -> k s s
+        Put s    k _ -> k () s
+        Return x   _ -> return x
     |]
 
   This prepends h to the list of FStateHandler's type variables yielding:
@@ -64,16 +69,21 @@
     newtype FStateHandler h s a = FStateHandler s
     type instance Result (FStateHandler h s a) = a
     instance (FStateHandler h s a `Handles` Get s) where
-      clause (FStateHandler s) Get k = k (FStateHandler s) s
+      clause Get     k' (FStateHandler s) = k s s
+        where
+          k v s = k' v (FStateHandler s)
     instance (FStateHandler h s a `Handles` Put s) where
-      clause _ (Put s) k = k (FStateHandler s) ()
+      clause (Put s) k' _                 = k () s
+        where
+          k v s = k' v (FStateHandler s)
+    fStateHandler s comp = handle comp (\x _ -> return x) (FStateHandler s)
 
   and additionally generates the following forwarding instances:
 
     instance (h `Handles` op) => (PVHandler h a `Handles` op) where
-      clause h op k = doOp op >>= k h
+      clause op k h = doOp op >>= (\x -> k x h)
     instance (h `PolyHandles` op) => (PVHandler h a `PolyHandles` op) where
-      polyClause h op k = polyDoOp op >>= k h
+      polyClause op k h = polyDoOp op >>= (\x -> k x h)
 
   A polymorphic operation:
 
@@ -83,12 +93,15 @@
 
     data Failure a = Failure
     type instance Return (Failure a) = a
+    failure :: forall h a.(h `Handles` Failure a) => Comp h a
     failure = doPolyOp Failure
 
-  A polymorphic handler:
+  A handler for a polymorphic operation:
 
-    [handler|MaybeHandler a : Maybe a handles {Failure} where
-       polyClause _ Failure k = Nothing
+    [handler|
+       MaybeHandler a : Maybe a polyhandles {Failure} where
+         Failure  k -> Nothing
+         Return x   -> Just x
     |]
 
   This elaborates to
@@ -96,47 +109,16 @@
     newtype MaybeHandler a = MaybeHandler
     type instance Result (MaybeHandler a) = a
     instance (MaybeHandler a `PolyHandles` Failure) where
-      polyClause _ Failure k = Nothing
+      polyClause Failure k = Nothing
+    maybeHandler comp = handle comp (\x _ -> Just) MaybeHandler
 
   The collection of operations in the curly braces includes only those
   operations whoses clauses are defined up-front. Further clauses can
   be added later using explicit instances of the Handles type
-  class. Sometimes we have to do this when we require an explicit
-  class constraint.
+  class.
 
   Any clauses that reference operations not declared in curly braces
   are currently ignored.
-
-  We might consider adapting the sugar to inline handler parameters as
-  curried arguments to the clauses and the continuation. For instance:
-
-    [handler|StateHandler s a : s -> a handles {Get s, Put s} where
-      clause s Get     k = k s s
-      clause s (Put s) k = k s ()
-    |]
-
-  would elaborate to:
-
-    newtype StateHandler s a = StateHandler s
-    type instance Result (StateHandler s a) = a
-    instance (StateHandler s a `Handles` Get s) where
-      clause (StateHandler s) Get k' = k s s
-        where
-          k s = k' (StateHandler s)
-    instance (StateHandler s a `Handles` Put s) where
-      clause _ (Put s) k' = k s ()
-        where
-          k s = k' (StateHandler s)
-
-  We might also generate a wrapper function for the handler:
-
-    stateHandler comp s r = handle comp (StateHandler s) r
-
-  Doing something like this for McBride handlers might make sense.
-
-  If we have a wrapper function, then we could add sugar for a fixed
-  return clause which is always supplied to the handler by the wrapper
-  function.
 
 -}
 
@@ -311,7 +293,7 @@ opParser :: String -> Q [Dec]
 opParser s = makeOpDefs (parseOpDef s)
 
 makeOpDefs :: (Maybe String, String, [String], String) -> Q [Dec]
-makeOpDefs (poly, name, ts, sig) = return [opType, returnInstance, opFun]
+makeOpDefs (poly, name, ts, sig) = return [opType, returnInstance, opFunSig, opFun]
     where
       f = parseType sig
 
@@ -343,6 +325,22 @@ makeOpDefs (poly, name, ts, sig) = return [opType, returnInstance, opFun]
       xs = vars 0 args
       vars i []       = []
       vars i (_:args) = mkName ("x" ++ show i) : vars (i+1) args
+      
+      (handles, happ) =
+        case poly of
+          Just _  -> (mkName "PolyHandles", ConT cname `appType` map VarT (init tyvars))
+          Nothing -> (mkName "Handles", ConT cname `appType` map VarT tyvars)
+
+      opFunSig =
+        SigD fname
+        (ForallT
+         (PlainTV h:map PlainTV tyvars)
+         [ClassP handles [VarT h, happ]]
+         (makeFunType h args))
+        where
+          h = mkName "handler" -- HACK: hopefully "handler" is fresh
+      makeFunType h [] = appType (ConT (mkName "Comp")) [VarT h, result]
+      makeFunType h (t:ts) = AppT (AppT ArrowT t) (makeFunType h ts)
       opFun =
           FunD fname
                [Clause (map VarP xs)

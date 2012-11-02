@@ -203,7 +203,7 @@ tossesXor' n = loop n
 
 newtype LazyVar a = LazyVar Int
 
-letLazy :: (h `PolyHandles` LetLazy) => Q a -> Comp h (LazyVar a)
+--letLazy :: (h `PolyHandles` LetLazy) => Q a -> Comp h (LazyVar a)
 [operation|forall a.LetLazy : Q a -> LazyVar a|]
 [operation|forall a.Force   : LazyVar a -> a|]
 

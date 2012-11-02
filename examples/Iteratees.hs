@@ -29,10 +29,11 @@ getline = loop ""
         check acc (Just c) | c /= '\n' = loop (c:acc)
         check acc _                    = return (reverse acc)
 
-[handler|EvalHandler a : String -> a handles {GetC} where
-  GetC     k ""    -> k Nothing ""
-  GetC     k (c:t) -> k (Just c) t
-  Return x   _     -> x
+[handler|
+  EvalHandler a : String -> a handles {GetC} where
+    GetC     k ""    -> k Nothing ""
+    GetC     k (c:t) -> k (Just c) t
+    Return x   _     -> x
 |]
 
 eval :: String -> I a -> a
