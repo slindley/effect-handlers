@@ -1,7 +1,5 @@
 {- TODO:
 
-  * Generate type signatures for handler functions.
-
   * Check that there are no redundant clauses in handlers (those that
     don't match up with any of the declared operations are just
     ignored).
@@ -149,7 +147,9 @@ handlerParser s = return (makeHandlerDef (parseHandlerDef s))
 
 makeHandlerDef :: HandlerDef -> [Dec]
 makeHandlerDef (h, name, ts, (sig, polySig), r, cs) =
-  [handlerType, resultInstance] ++ opClauses ++ polyClauses ++ forwardClauses ++ [handlerFun]
+  [handlerType, resultInstance] ++
+  opClauses ++ polyClauses ++ forwardClauses ++
+  [handlerFun]
     where
       cname = mkName (let (c:cs) = name in toUpper(c) : cs)
       fname = mkName (let (c:cs) = name in toLower(c) : cs)
@@ -180,6 +180,32 @@ makeHandlerDef (h, name, ts, (sig, polySig), r, cs) =
 
       vars i []       = []
       vars i (_:args) = mkName ("x" ++ show i) : vars (i+1) args
+
+      -- It's tempting to try to give handler functions signatures that abstract away
+      -- from the handler type. But this doesn't appear to be feasible, as the
+      -- explicit handler type seems essential for working around the limitations of
+      -- the GHC type system.
+      --
+      -- In particular there seems to be no other way of encoding
+      -- subtraction of operations by a handler.
+      -- 
+      -- handlerFunSig =
+      --   SigD fname
+      --   (ForallT
+      --    (map PlainTV tyvars)
+      --    []
+      --    (makeFunType (AppT (AppT ArrowT compType) result) args))
+      --   where
+      --     cs = map (opConstraint False) sig ++ map (opConstraint True) polySig
+      --     compType = ForallT [PlainTV h] cs (ConT (mkName "Comp") `appType` [VarT h, result])
+      --     opConstraint poly (opName, tvs) = ClassP handles [VarT h, op]
+      --       where
+      --         op = ConT (mkName opName) `appType` map (VarT . mkName) tvs
+      --         handles = if poly then polyHandles else monoHandles
+      --     h = mkName "handler" -- HACK: hopefully "handler" is fresh
+      --
+      -- makeFunType result [] = result
+      -- makeFunType result (t:ts) = AppT (AppT ArrowT t) (makeFunType result ts)
 
       handlerFun =
         FunD fname [Clause (handlerArgs ++ [VarP comp]) body [retDec]]

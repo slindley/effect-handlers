@@ -8,6 +8,18 @@
 
 module Handlers where
 
+-- CPS translation of handlers
+--
+-- [[A]]_E = forall X.(A -> [[E_op1]] -> ... -> [[E_opn]] -> X) -> [[E_op1]] -> ... -> [[E_opn]] -> X
+--
+-- [[opi p]]           = /\X -> \k -> \op1...opn -> opi p k
+-- [[return x]]        = /\X -> \k -> \op1...opn -> k x op1 ... opn
+-- [[let x = M in N]]  = /\X -> \k -> \op1...opn -> [[M]] X (\v -> [[N]][x := v] X k op1...opn) op1...opn
+-- [[handle M with H]] = [[M]] [[H_R]] [[H_ret]] [[H_op1]] ... [[H_opn]]
+--           
+-- [[return x |-> M]]  = \v  -> [[M]][x := v]
+-- [[opi p k |-> M]]   = \v f -> [[M]][p := v, k := f]
+
 type family Return op :: *
 type family Result h :: *
 class h `Handles` op where
@@ -56,6 +68,8 @@ get = doOp Get
 newtype Put s = Put s
 type instance Return (Put s) = ()
 put s = doOp (Put s)
+
+type State s a = (h `Handles` Get s, h `Handles` Put s) => Comp h a
 
 newtype StateHandler s a = StateHandler s
 type instance Result (StateHandler s a) = a

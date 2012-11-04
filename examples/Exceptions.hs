@@ -14,7 +14,7 @@ import DesugarHandlers
     DivideHandler a : a handles {Divide} where
       Divide x y k -> k (x `div` y)
       Return x     -> return x                                   
-|]    
+|]
 [handler|
   forward h.(h `PolyHandles` DivideByZero, h `Handles` Divide) =>
     CheckZeroHandler a : a handles {Divide} where
@@ -22,27 +22,22 @@ import DesugarHandlers
                         divideByZero
                       else
                         (x `divide` y) >>= (\x -> k x)
-      Return x     -> return (Right x)
+      Return x     -> return x
 |]
 [handler|
   forward h.ReportErrorHandler a : Either String a polyhandles {DivideByZero} where
     DivideByZero k -> return $ Left "Cannot divide by zero"
-    Return x       -> return x
+    Return x       -> return (Right x)
 |]
 
 
 type D a = forall h.(h `Handles` Divide) => Comp h a
+type DZ a = forall h.(h `PolyHandles` DivideByZero) => Comp h a
+type DDZ a = forall h.(h `PolyHandles` DivideByZero, h `Handles` Divide) => Comp h a
 
 divUnchecked :: D a -> a
 divUnchecked comp = (handlePure . divideHandler) comp 
 
--- Perhaps (const return) should be a default for forwarding handlers
--- and (const id) for non-forwarding handlers?
---
--- For now we'll just insist on including the return clause. Automatic
--- things may be too bug-prone and confusing.
-
 divChecked :: D a -> Either String a
 divChecked comp = (handlePure . reportErrorHandler . divideHandler . checkZeroHandler) comp
-
 
