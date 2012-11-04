@@ -17,7 +17,7 @@ import DesugarHandlers
 
 type LChar = Maybe Char
 
-[operation|GetC : LChar|]
+[operation|GetC :: LChar|]
 
 type I a = forall h.(h `Handles` GetC) => Comp h a
 
@@ -30,7 +30,7 @@ getline = loop ""
         check acc _                    = return (reverse acc)
 
 [handler|
-  EvalHandler a : String -> a handles {GetC} where
+  EvalHandler a :: String -> a handles {GetC} where
     GetC     k ""    -> k Nothing ""
     GetC     k (c:t) -> k (Just c) t
     Return x   _     -> x
@@ -47,7 +47,7 @@ getlines = loop []
 
 [handler|
   forward h.(h `Handles` GetC) =>
-    EnStrHandler a : String -> a handles {GetC} where
+    EnStrHandler a :: String -> a handles {GetC} where
       GetC     k ""    -> do {c <- getC; k c ""}
       GetC     k (c:t) -> k (Just c) t
       Return x   _     -> return x
@@ -71,7 +71,7 @@ en_str s comp = enStrHandler s comp
 
 -- RunHandler throws away any outstanding unhandled GetC applications
 [handler|
-  forward h.RunHandler a : a handles {GetC} where
+  forward h.RunHandler a :: a handles {GetC} where
     GetC     k -> k Nothing
     Return x   -> return x
 |]
@@ -81,7 +81,7 @@ run comp = runHandler comp
 
 -- like RunHandler but with no underlying handler
 [handler|
-  PureRunHandler a : a handles {GetC} where
+  PureRunHandler a :: a handles {GetC} where
     GetC   k -> k Nothing
     Return x -> x
 |]
@@ -91,7 +91,7 @@ pureRun comp = pureRunHandler comp
 data FlipState h a = FlipState Bool LChar (LChar -> FlipState h a -> Comp h a)
 [handler|
   forward h.(h `Handles` GetC) =>
-    FlipHandler a : FlipState h a -> a handles {GetC} where
+    FlipHandler a :: FlipState h a -> a handles {GetC} where
       GetC     kl (FlipState True  c kr) -> do {kr c (FlipState False c kl)}
       GetC     kr (FlipState False _ kl) -> do {c <- getC; kl c (FlipState True c kr)}
       Return x    _                      -> return x

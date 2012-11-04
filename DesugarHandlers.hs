@@ -15,8 +15,8 @@
 {-
   State operations:
 
-    [operation|Get s : s|]
-    [operation|Put s : s -> ()|]
+    [operation|Get s :: s|]
+    [operation|Put s :: s -> ()|]
 
   These elaborate to:
 
@@ -33,7 +33,7 @@
   A non-forwarding state handler:
 
     [handler|
-      StateHandler s a : s -> a handles {Get s, Put s} where
+      StateHandler s a :: s -> a handles {Get s, Put s} where
         Get      k s -> k s s
         Put s    k _ -> k () s
         Return x   _ -> x
@@ -56,7 +56,7 @@
   A forwarding state handler:
 
     [handler|
-      forward h.FStateHandler s a : s -> a handles {Get s, Put s} where
+      forward h.FStateHandler s a :: s -> a handles {Get s, Put s} where
         Get      k s -> k s s
         Put s    k _ -> k () s
         Return x   _ -> return x
@@ -85,7 +85,7 @@
 
   A polymorphic operation:
 
-    [operation|Failure : forall a.a|]
+    [operation|Failure :: forall a.a|]
 
   This elaborates to:
 
@@ -97,7 +97,7 @@
   A handler for a polymorphic operation:
 
     [handler|
-       MaybeHandler a : Maybe a polyhandles {Failure} where
+       MaybeHandler a :: Maybe a polyhandles {Failure} where
          Failure  k -> Nothing
          Return x   -> Just x
     |]

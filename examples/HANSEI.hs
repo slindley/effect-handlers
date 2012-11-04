@@ -33,8 +33,8 @@ accum x target []                          = undefined
 accum x target ((y, v):l) | (x+y) > target = v
 accum x target ((y, v):l)                  = accum (x+y) target l
 
-[operation|forall a.Dist    : [(Prob, a)] -> a|]
-[operation|forall a.Failure : a|] 
+[operation|forall a.Dist    :: [(Prob, a)] -> a|]
+[operation|forall a.Failure :: a|] 
 
 type Prob = Double
 
@@ -56,7 +56,7 @@ instance (Show a) => Show (VC a) where
   show (V a) = show a
   show (C a) = ".."
 
-[handler|PVHandler a : PV a polyhandles {Dist, Failure} where
+[handler|PVHandler a :: PV a polyhandles {Dist, Failure} where
   Dist ps  k -> map (\(p, v) -> (p, C (k v))) ps
   Failure  k -> []
   Return x   -> [(1, V x)]
@@ -135,13 +135,13 @@ reflectUntil n choices =
       C choices' -> if n == 0 then stop choice
                     else reflectUntil (n-1) choices'
    
-[operation|forall r.Stop a : VC a -> r|]
+[operation|forall r.Stop a :: VC a -> r|]
 
 --type Q' a = forall h.(DistFail h, h `PolyHandles` Stop a) => Comp h a
 type Q' a = forall h.(h `PolyHandles` Dist, h `PolyHandles` Failure, h `PolyHandles` Stop a) => Comp h a
 
 [handler|
-  forward h.ExploreHandler a : Prob -> Map.Map a Prob -> Map.Map a Prob
+  forward h.ExploreHandler a :: Prob -> Map.Map a Prob -> Map.Map a Prob
     polyhandles {Failure, Dist} where
       Failure  k _ m -> return m
       Dist ps  k s m -> foldM (\m' (p, v) -> k v (s*p) m') m ps
@@ -157,7 +157,7 @@ exploreHandler' comp =
   exploreHandler 1 Map.empty comp >>= return . (Map.foldrWithKey (\k p l -> (p, k):l) [])
 
 [handler|
-  ExploreUntilHandler a : Prob -> Map.Map a Prob -> PV a -> (Map.Map a Prob, PV a)
+  ExploreUntilHandler a :: Prob -> Map.Map a Prob -> PV a -> (Map.Map a Prob, PV a)
     polyhandles {Failure, Dist, Stop a} where
       Failure   k _ m susp -> (m, susp)
       Dist ps   k s m susp ->
@@ -204,8 +204,8 @@ tossesXor' n = loop n
 newtype LazyVar a = LazyVar Int
 
 --letLazy :: (h `PolyHandles` LetLazy) => Q a -> Comp h (LazyVar a)
-[operation|forall a.LetLazy : Q a -> LazyVar a|]
-[operation|forall a.Force   : LazyVar a -> a|]
+[operation|forall a.LetLazy :: Q a -> LazyVar a|]
+[operation|forall a.Force   :: LazyVar a -> a|]
 
 -- newtype BoxQ a = BoxQ {unBoxQ :: Q a}
 
@@ -228,7 +228,7 @@ forceComp x m =
 
 [handler|
   forward h.(h `PolyHandles` Dist, h `PolyHandles` Failure) =>
-    LetLazyHandler a : Int -> CompMap -> a
+    LetLazyHandler a :: Int -> CompMap -> a
       polyhandles {LetLazy, Force} where
         LetLazy q         k x m ->
           k (LazyVar x) (x+1) (Map.insert x (LeftComp q) m)
@@ -274,10 +274,10 @@ allHeads n =
           v' <- force v
           if v' then loop vs else return False
 
-[operation|Rand : Double|]
+[operation|Rand :: Double|]
 
 [handler|
-  forward h.(h `Handles` Rand) => SampleHandler a : a
+  forward h.(h `Handles` Rand) => SampleHandler a :: a
     polyhandles {Dist} where
       Dist ps  k ->
         do
@@ -291,7 +291,7 @@ allHeads n =
 -- what's this for?
 [handler|
   forward h.(h `Handles` Rand) =>
-    ImportanceHandler a : Int -> Double -> [(Prob, a)]
+    ImportanceHandler a :: Int -> Double -> [(Prob, a)]
       polyhandles {Dist,Failure} where
         Dist ps k n s ->
           do
@@ -349,7 +349,7 @@ importanceSamples' i pv comp n =
 
 [handler|
   forward h.
-    SampleLoop a : Comp (SampleLoop h a) a -> a
+    SampleLoop a :: Comp (SampleLoop h a) a -> a
       polyhandles {Failure} where
         Failure  k comp -> sampleLoop comp comp
         Return x   _    -> return x

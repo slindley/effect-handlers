@@ -60,7 +60,7 @@ handlerdef =
       name <- upperId
       spaces
       ts <- tyVars
-      char ':'
+      string "::"
       spaces
       r <- result
       sig <- handlerSig "handles"
@@ -115,7 +115,7 @@ opdef =
       name <- upperId
       spaces
       xs <- tyVars
-      char ':'
+      string "::"
       spaces
       sig <- many anyChar
       return (a, name, xs, sig)
