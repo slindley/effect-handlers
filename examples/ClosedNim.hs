@@ -6,14 +6,10 @@
 -- of sticks. The winner is the player who takes the last stick.
 
 {-# LANGUAGE TypeFamilies, NoMonomorphismRestriction,
-             FlexibleContexts, TypeOperators,
-             FlexibleInstances, MultiParamTypeClasses, OverlappingInstances,
-             TemplateHaskell, QuasiQuotes
-  #-}
+             FlexibleContexts, TypeOperators #-}
 
 import Data.List
-import Handlers
-import DesugarHandlers
+import ClosedHandlers
 
 -- Operations:
 --
@@ -26,24 +22,29 @@ data Player = Me | You
 -- parameter is a pair of the player and the number of sticks
 -- remaining. The return value is the number of sticks the player
 -- chooses to take.
-[operation|Move :: Player -> Int -> Int|]
+data Move = Move
+instance Op Move where
+  type Param Move = (Player, Int)
+  type Return Move = Int
+move :: (Move `In` e) => (Player, Int) -> Comp e Int
+move = applyOp Move
 
 -- a game parameterised by the number of starting sticks
-game :: (h `Handles` Move) => Int -> Comp h Player
+game :: (Move `In` e) => Int -> Comp e Player
 game = myTurn
 
 myTurn n =
   if n == 0 then return You
   else
     do
-      take <- move Me n
+      take <- move (Me, n)
       yourTurn (n-take)
       
 yourTurn n =
   if n == 0 then return Me
   else
     do
-      take <- move You n
+      take <- move (You, n)
       myTurn (n-take)
 
 -- Note that this implementation does not check that each player takes
@@ -52,17 +53,15 @@ yourTurn n =
 
 -- a perfect strategy given n remaining sticks (represented as an
 -- operation clause)
-perfect :: Int -> (Int -> r) -> r
+perfect :: Monad m => Int -> (Int -> m a) -> m a
 perfect n k = k (max (n `mod` 4) 1)
 
 -- perfect vs perfect
-[handler|
-  PP :: Player handles {Move} where
-    Return x   -> x
-    Move _ n k -> perfect n k
-|]
-pp :: Int -> Player
-pp n = pP (game n)
+pp :: Monad m => Int -> m Player
+pp n =
+  handle (game n)
+  (Move |-> (\(_, n) -> perfect n) :<: Empty,
+   return)
 
 -- *Main> pp 3
 -- Me
@@ -79,22 +78,23 @@ validMoves n = filter (<= n) [1,2,3]
 --
 -- Enumerate all the moves. If one of them leads to a win for player,
 -- then move it. Otherwise just take 1 stick.
-bruteForce :: Player -> Int -> (Int -> Player) -> Player
+bruteForce :: Monad m => Player -> Int -> (Int -> m Player) -> m Player
 bruteForce player n k =
-  let winners = map k (validMoves n) in
-  case (elemIndex player winners) of
-    Nothing -> k 1
-    Just i  -> k (i+1)
+  do
+    winners <- mapM k (validMoves n)
+    case (elemIndex player winners) of
+      Nothing -> k 1
+      Just i  -> k (i+1)
 
 -- brute force vs perfect
-[handler|
-  BP :: Player handles {Move} where
-    Return x     -> x
-    Move Me  n k -> bruteForce Me n k
-    Move You n k -> perfect n k
-|]
-bp :: Int -> Player
-bp n = bP (game n)
+bp :: Monad m => Int -> m Player
+bp n =
+  handle (game n)
+  (Move |-> (\(player, n) ->
+                case player of
+                  Me  -> bruteForce Me n
+                  You -> perfect n) :<: Empty,
+   return)
 
 -- bruteForce behaves just the same as the perfect strategy, except it
 -- is much slower
@@ -115,21 +115,19 @@ data MoveTree = Take (Player, [(Int, MoveTree)]) | Winner Player
   deriving Show
 
 -- reify a move as part of a move tree
-reifyMove :: Player -> Int -> (Int -> Comp h MoveTree) -> Comp h MoveTree
+reifyMove :: Monad m => Player -> Int -> (Int -> m MoveTree) -> m MoveTree
 reifyMove player n k =
   do
     l <- mapM k (validMoves n)
     return $ Take (player, zip [1..] l)
     
 -- generate the complete move tree for a game starting with n sticks
-[handler|
-  forward h.MM :: MoveTree handles {Move} where
-    Return x        -> return (Winner x)
-    Move player n k -> reifyMove player n k
-|] 
-mm :: Int -> MoveTree
-mm n = handlePure (mM (game n))
-    
+mm :: Monad m => Int -> m MoveTree
+mm n =
+  handle (game n)
+  (Move |-> (\(player, n) -> reifyMove player n) :<: Empty,
+   \x -> return $ Winner x)
+
 -- *Main> mm 3
 -- Take (Me, [(1, Take (You, [(1, Take (Me, [(1,Winner Me)])),
 --                            (2, Winner You)])),
@@ -138,57 +136,58 @@ mm n = handlePure (mM (game n))
 
 -- generate the move tree for a game in which you play a perfect
 -- strategy
-
-[handler|
-  forward h.(h `Handles` Move) =>
-    MPIn :: MoveTree handles {Move} where
-      Return x        -> return (Winner x)
-      Move player n k -> case player of
-                           Me  -> reifyMove Me n k
-                           You ->
-                             do
-                               take <- move You n
-                               tree <- k take
-                               return $ Take (You, [(take, tree)])
-|]
-[handler|
-  MP :: MoveTree handles {Move} where
-    Return x     -> x
-    Move You n k -> perfect n k
-|]
-mp :: Int -> MoveTree
-mp n = (mP . mPIn) (game n)
+mp :: Monad m => Int -> m MoveTree
+mp n =
+  handle
+  (handle (game n)
+   (Move |-> (\(player, n) k ->
+                 case player of
+                   Me -> reifyMove Me n k
+                   You ->
+                     do
+                       take <- move (You, n)
+                       tree <- k take
+                       return $ Take (You, [(take, tree)])) :<: Empty,
+    \x -> return $ Winner x))
+  (Move |-> (\(You, n) -> perfect n) :<: Empty,
+   return)
 
 -- *Main> mp 3
 -- Take (Me, [(1, Take (You, [(2, Winner You)])),
 --            (2, Take (You, [(1, Winner You)])),
 --            (3, Winner Me)])
    
+-- an uninhabited type
+data Void
+
 -- cheat (p, m) is invoked when player p cheats by attempting to take
 -- m sticks (for m < 1 or 3 < m)
-[operation|forall a.Cheat :: Player -> Int -> a|]
+data Cheat = Cheat
+instance Op Cheat where
+  type Param Cheat = (Player, Int) 
+  type Return Cheat = Void
+cheat :: (Cheat `In` e) => (Player, Int) -> Comp e a
+cheat (p, m) = (applyOp Cheat (p, m)) >>= undefined
 
 -- a checked choice
 --
 -- If the player chooses a valid number of sticks, then the game
 -- continues. If not, then the cheat operation is invoked.
-checkChoice :: (h `Handles` Move, h `PolyHandles` Cheat) =>
-               Player -> Int -> (Int -> Comp h a) -> Comp h a
+checkChoice :: (Move `In` e, Cheat `In` e) =>
+               Player -> Int -> (Int -> Comp e a) -> Comp e a
 checkChoice player n k =
   do
-    take <- move player n
-    if take < 0 || 3 < take then cheat player take
+    take <- move (player, n)
+    if take < 0 || 3 < take then cheat (player, take)
     else k take
 
 -- a game that checks for cheating
-[handler|
-  forward h.(h `Handles` Move, h `PolyHandles` Cheat) =>
-    Check :: Player handles {Move} where
-      Return x        -> return x
-      Move player n k -> checkChoice player n k
-|]
-checkedGame :: (h `Handles` Move, h `PolyHandles` Cheat) => Int -> Comp h Player  
-checkedGame n = check (game n)
+checkedGame :: (Move `In` e, Cheat `In` e) => Int -> Comp e Player
+checkedGame n =
+  handle
+  (game n)
+  (Move |-> (\(player, n) -> checkChoice player n) :<: Empty,
+   return)
 
 -- a cheating strategy: take all of the sticks, no matter how many
 -- remain
@@ -196,14 +195,13 @@ cheater n k = k n
 
 -- I cheat against your perfect strategy
 -- (I always win)
-[handler|
-  CP :: Player handles {Move} where
-    Return x     -> x
-    Move Me  n k -> cheater n k
-    Move You n k -> perfect n k
-|]
-cp :: Int -> Player
-cp n = cP (game n)
+cp n =
+  handle (game n)
+  (Move |-> (\(player, n) -> 
+                case player of
+                  Me -> cheater n 
+                  You -> perfect n) :<: Empty,
+   return)
 
 -- *Main> cp 32
 -- Me
@@ -211,31 +209,36 @@ cp n = cP (game n)
 -- a game in which cheating leads to the game being abandoned, and the
 -- cheater is reported along with how many sticks they attempted to
 -- take
-[handler|
-  forward h.CheatEnd :: Player polyhandles {Cheat} where
-    Return x         -> return x
-    Cheat player n k -> error ("Cheater: " ++ show player ++ ", took; " ++ show n)
-|]
-cheaterEndingGame :: (h `Handles` Move) => Int -> Comp h Player
-cheaterEndingGame n = cheatEnd (checkedGame n)
+cheaterEndingGame :: (Move `In` e) => Int -> Comp e Player
+cheaterEndingGame n =
+  handle (checkedGame n)
+  (Move -:<:
+   Cheat |-> (\(p, n) _ -> error ("Cheater: " ++ show p ++ ", took: " ++ show n)) :<: Empty,
+   return)
 
 -- a game in which if I cheat then you win immediately, and if you
 -- cheat then I win immediately
-[handler|
-  forward h.CheatLose :: Player polyhandles {Cheat} where
-    Return x      -> return x
-    Cheat Me n k  -> return You
-    Cheat You n k -> return Me   
-|]
-cheaterLosingGame :: (h `Handles` Move) => Int -> Comp h Player
-cheaterLosingGame n = cheatLose (checkedGame n)
+cheaterLosingGame :: (Move `In` e) => Int -> Comp e Player
+cheaterLosingGame n =
+  handle (checkedGame n)
+  (Move -:<:
+   Cheat |-> (\(p, n) _ -> 
+               case p of
+                 Me -> return You
+                 You -> return Me) :<: Empty,
+   return)
 
 -- I cheat against your perfect strategy
 --
 -- (If n < 4 then I win, otherwise the game is abandoned because I
 -- cheat.)
-cpEnding :: Int -> Player
-cpEnding n = cP (cheaterEndingGame n)
+cpEnding n =
+  handle (cheaterEndingGame n)
+  (Move |-> (\(player, n) ->
+                case player of
+                  Me -> cheater n  
+                  You -> perfect n) :<: Empty,
+   return)
 
 -- *Main> cpEnding 3
 -- Me
@@ -245,8 +248,13 @@ cpEnding n = cP (cheaterEndingGame n)
 -- I cheat against your perfect strategy
 --
 -- (If n < 4 then I win, otherwise you win because I cheat.)
-cpLosing :: Int -> Player
-cpLosing n = cP (cheaterLosingGame n)
+cpLosing n =
+  handle (cheaterLosingGame n)
+  (Move |-> (\(player, n) ->
+                case player of
+                  Me -> cheater n
+                  You -> perfect n) :<: Empty,
+   return)
 
 -- *Main> cpLosing 3
 -- Me

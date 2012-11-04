@@ -17,7 +17,7 @@
     OverlappingInstances, FlexibleContexts,
     TypeOperators #-}
 
-module Handlers where
+module ClosedHandlers where
 
 import TypeNeq ((:=/=:))
 
