@@ -1,9 +1,10 @@
 -- The subtraction game (a variant of the game of nim).
 --
--- A game begins with n sticks on the table. I go first. I take
--- between one and three sticks, then it is your turn, and you take
--- between one and three sticks. We alternate turns until we run out
--- of sticks. The winner is the player who takes the last stick.
+-- A game begins with n sticks on the table. A game is played between
+-- Alice and Bob. Alice goes first. Alice takes between one and three
+-- sticks, then it is Bob's turn, and Bob takes between one and three
+-- sticks. They alternate turns until they run out of sticks. The
+-- winner is the player who takes the last stick.
 
 {-# LANGUAGE TypeFamilies, NoMonomorphismRestriction,
              FlexibleContexts, TypeOperators,
@@ -19,7 +20,7 @@ import DesugarHandlers
 --
 --   choose (player, n) = m, if player chooses m out of the remaining n sticks
 
-data Player = Me | You
+data Player = Alice | Bob
   deriving (Show, Eq)
 
 -- The 'Move' operation represents a move by a player in the game. The
@@ -30,21 +31,21 @@ data Player = Me | You
 
 -- a game parameterised by the number of starting sticks
 game :: (h `Handles` Move) => Int -> Comp h Player
-game = myTurn
+game = aliceTurn
 
-myTurn n =
-  if n == 0 then return You
+aliceTurn n =
+  if n == 0 then return Bob
   else
     do
-      take <- move Me n
-      yourTurn (n-take)
+      take <- move Alice n
+      bobTurn (n-take)
       
-yourTurn n =
-  if n == 0 then return Me
+bobTurn n =
+  if n == 0 then return Alice
   else
     do
-      take <- move You n
-      myTurn (n-take)
+      take <- move Bob n
+      aliceTurn (n-take)
 
 -- Note that this implementation does not check that each player takes
 -- between one and three sticks on each turn. We will add such a check
@@ -65,11 +66,11 @@ pp :: Int -> Player
 pp n = pP (game n)
 
 -- *Main> pp 3
--- Me
+-- Alice
 -- *Main> pp 29
--- Me
+-- Alice
 -- *Main> pp 32
--- You
+-- Bob
 
 -- list of valid moves given n sticks remaining
 validMoves :: Int -> [Int]
@@ -78,7 +79,7 @@ validMoves n = filter (<= n) [1,2,3]
 -- a brute force strategy
 --
 -- Enumerate all the moves. If one of them leads to a win for player,
--- then move it. Otherwise just take 1 stick.
+-- then take it. Otherwise just take 1 stick.
 bruteForce :: Player -> Int -> (Int -> Player) -> Player
 bruteForce player n k =
   let winners = map k (validMoves n) in
@@ -90,8 +91,8 @@ bruteForce player n k =
 [handler|
   BP :: Player handles {Move} where
     Return x     -> x
-    Move Me  n k -> bruteForce Me n k
-    Move You n k -> perfect n k
+    Move Alice  n k -> bruteForce Alice n k
+    Move Bob n k -> perfect n k
 |]
 bp :: Int -> Player
 bp n = bP (game n)
@@ -100,11 +101,11 @@ bp n = bP (game n)
 -- is much slower
 
 -- *Main> bp 3
--- Me
+-- Alice
 -- *Main> bp 31
--- Me
+-- Alice
 -- *Main> bp 32
--- You
+-- Bob
 
 -- Instead of simply evaluating the winner according to some strategy,
 -- we can also compute other data. For instance, we can compute a tree
@@ -123,7 +124,7 @@ reifyMove player n k =
     
 -- generate the complete move tree for a game starting with n sticks
 [handler|
-  forward h.MM :: MoveTree handles {Move} where
+  MM h :: Comp h MoveTree handles {Move} where
     Return x        -> return (Winner x)
     Move player n k -> reifyMove player n k
 |] 
@@ -131,38 +132,35 @@ mm :: Int -> MoveTree
 mm n = handlePure (mM (game n))
     
 -- *Main> mm 3
--- Take (Me, [(1, Take (You, [(1, Take (Me, [(1,Winner Me)])),
---                            (2, Winner You)])),
---            (2, Take (You, [(1,Winner You)])),
---            (3, Winner Me)])
+-- Take (Alice, [(1, Take (Bob, [(1, Take (Alice, [(1,Winner Alice)])),
+--                            (2, Winner Bob)])),
+--              (2, Take (Bob, [(1,Winner Bob)])),
+--              (3, Winner Alice)])
 
--- generate the move tree for a game in which you play a perfect
+-- generate the move tree for a game in which Bob plays a perfect
 -- strategy
-
 [handler|
   forward h.(h `Handles` Move) =>
     MPIn :: MoveTree handles {Move} where
       Return x        -> return (Winner x)
-      Move player n k -> case player of
-                           Me  -> reifyMove Me n k
-                           You ->
-                             do
-                               take <- move You n
-                               tree <- k take
-                               return $ Take (You, [(take, tree)])
+      Move Alice n k -> reifyMove Alice n k
+      Move Bob n k   -> do
+                          take <- move Bob n
+                          tree <- k take
+                          return $ Take (Bob, [(take, tree)])
 |]
 [handler|
   MP :: MoveTree handles {Move} where
     Return x     -> x
-    Move You n k -> perfect n k
+    Move Bob n k -> perfect n k
 |]
 mp :: Int -> MoveTree
 mp n = (mP . mPIn) (game n)
 
 -- *Main> mp 3
--- Take (Me, [(1, Take (You, [(2, Winner You)])),
---            (2, Take (You, [(1, Winner You)])),
---            (3, Winner Me)])
+-- Take (Alice, [(1, Take (Bob, [(2, Winner Bob)])),
+--               (2, Take (Bob, [(1, Winner Bob)])),
+--               (3, Winner Alice)])
    
 -- cheat (p, m) is invoked when player p cheats by attempting to take
 -- m sticks (for m < 1 or 3 < m)
@@ -194,19 +192,19 @@ checkedGame n = check (game n)
 -- remain
 cheater n k = k n
 
--- I cheat against your perfect strategy
--- (I always win)
+-- Alice cheats against Bob's perfect strategy
+-- (Alice always wins)
 [handler|
   CP :: Player handles {Move} where
     Return x     -> x
-    Move Me  n k -> cheater n k
-    Move You n k -> perfect n k
+    Move Alice  n k -> cheater n k
+    Move Bob    n k -> perfect n k
 |]
 cp :: Int -> Player
 cp n = cP (game n)
 
 -- *Main> cp 32
--- Me
+-- Alice
 
 -- a game in which cheating leads to the game being abandoned, and the
 -- cheater is reported along with how many sticks they attempted to
@@ -219,36 +217,37 @@ cp n = cP (game n)
 cheaterEndingGame :: (h `Handles` Move) => Int -> Comp h Player
 cheaterEndingGame n = cheatEnd (checkedGame n)
 
--- a game in which if I cheat then you win immediately, and if you
--- cheat then I win immediately
+-- a game in which if Alice cheats then Bob wins immediately, and if Bob
+-- cheats then Alice wins immediately
 [handler|
   forward h.CheatLose :: Player polyhandles {Cheat} where
-    Return x      -> return x
-    Cheat Me n k  -> return You
-    Cheat You n k -> return Me   
+    Return x        -> return x
+    Cheat Alice n k -> return Bob
+    Cheat Bob n k   -> return Alice   
 |]
 cheaterLosingGame :: (h `Handles` Move) => Int -> Comp h Player
 cheaterLosingGame n = cheatLose (checkedGame n)
 
--- I cheat against your perfect strategy
+-- Alice cheats against Bob's perfect strategy
 --
--- (If n < 4 then I win, otherwise the game is abandoned because I
--- cheat.)
+-- (If n < 4 then Alice win, otherwise the game is abandoned because
+-- Alices cheats.)
 cpEnding :: Int -> Player
 cpEnding n = cP (cheaterEndingGame n)
 
 -- *Main> cpEnding 3
--- Me
+-- Alice
 -- *Main> cpEnding 5
--- *** Exception: Cheater: Me, took: 5
+-- *** Exception: Cheater: Alice, took: 5
 
--- I cheat against your perfect strategy
+-- Alice cheat against Bob's perfect strategy
 --
--- (If n < 4 then I win, otherwise you win because I cheat.)
+-- (If n < 4 then Alice wins, otherwise Bob wins because Alice
+-- cheats.)
 cpLosing :: Int -> Player
 cpLosing n = cP (cheaterLosingGame n)
 
 -- *Main> cpLosing 3
--- Me
+-- Alice
 -- *Main> cpLosing 5
--- You
+-- Bob
