@@ -3,7 +3,8 @@
 {-# LANGUAGE TypeFamilies,
     MultiParamTypeClasses,
     TypeOperators,
-    NoMonomorphismRestriction  
+    NoMonomorphismRestriction,
+    FunctionalDependencies
   #-}
 
 module Handlers where
@@ -44,9 +45,25 @@ instance Functor (Comp h) where
   fmap f c = c >>= \x -> return (f x)
 
 -- polymorphic operations
-class h `PolyHandles` op where polyClause :: op a -> (Return (op a) -> h -> Result h) -> h -> Result h
+class h `PolyHandles` op where
+  polyClause :: op a -> (Return (op a) -> h -> Result h) -> h -> Result h
 polyDoOp :: (h `PolyHandles` op) => op a -> Comp h (Return (op a))
 polyDoOp op = Comp (\k h -> polyClause op k h)
+
+-- -- mono operations
+-- class h `MonoHandles` op where
+--   type Arg h op :: *
+--   monoClause :: op (Arg h op) -> (Return (op (Arg h op)) -> h -> Result h) -> h -> Result h
+-- monoDoOp :: (h `MonoHandles` op) => op (Arg h op) -> Comp h (Return (op (Arg h op)))
+-- monoDoOp op = Comp (\k h -> monoClause op k h)
+
+-- mono operations
+class (h `MonoHandles` op) a | h op -> a where
+  monoClause :: op a -> (Return (op a) -> h -> Result h) -> h -> Result h
+monoDoOp :: (h `MonoHandles` op) a => op a -> Comp h (Return (op a))
+monoDoOp op = Comp (\k h -> monoClause op k h)
+
+
 
 -- pure handlers
 data PureHandler a = PureHandler
@@ -69,7 +86,7 @@ newtype Put s = Put s
 type instance Return (Put s) = ()
 put s = doOp (Put s)
 
-type State s a = (h `Handles` Get s, h `Handles` Put s) => Comp h a
+--type State s a = (h `Handles` Get s, h `Handles` Put s) => Comp h a
 
 newtype StateHandler s a = StateHandler s
 type instance Result (StateHandler s a) = a
