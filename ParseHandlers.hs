@@ -11,7 +11,6 @@ import ParseCode
 --import Control.Applicative ((<*>), (<*), (*>), (<$>), (<$))
 
 {- Handler definitions -}
-
 type HandlerDef = (Maybe (String, Maybe String),
                    String,
                    [String],
@@ -98,7 +97,8 @@ result = manyTill anyChar (try (lookAhead (do {many1 space; string "handles" <|>
 clauses = many anyChar
 
 
-type OpDef = (Maybe String, String, [String], String)
+data QuantifierKind = Forall | Exists
+type OpDef = (Maybe (QuantifierKind, String), String, [String], String)
 
 {- Operation definitions -}
 
@@ -111,7 +111,7 @@ opdef :: GenParser Char a OpDef
 opdef =
     do
       spaces
-      a <- optionMaybe forall
+      a <- optionMaybe quantifier
       name <- upperId
       spaces
       xs <- tyVars
@@ -120,16 +120,18 @@ opdef =
       sig <- many anyChar
       return (a, name, xs, sig)
 
-forall =
+quantifierKind :: GenParser Char a QuantifierKind
+quantifierKind = do {string "exists"; return Exists} <|> do {string "forall"; return Forall}
+
+quantifier =
     do
-      string "forall"
+      q <- quantifierKind
       spaces
       h <- lowerId
       spaces
       char '.'
       spaces
-      return h
-
+      return (q, h)
 
 {- Utilities -}
       

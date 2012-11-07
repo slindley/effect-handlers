@@ -9,13 +9,8 @@ import Control.Monad
 import Handlers
 import DesugarHandlers
 
-[operation|Await s :: s|]
-[operation|Yield s :: s -> ()|]
-
-await'   = monoDoOp Await
-yield' s = monoDoOp (Yield s)
-
-type Foo op a = (a ~ Return op) => Maybe op
+[operation|exists s.Await :: s|]
+[operation|exists s.Yield :: s -> ()|]
 
 type Pipe i o h a   = ((h `MonoHandles` Await) i, (h `MonoHandles` Yield) o) => Comp h a
 type Consumer i h a = (h `MonoHandles` Await) i => Comp h a
@@ -81,14 +76,14 @@ d <+< u = down (up u) d
 (>+>) = flip (<+<)
 
 fromList :: [a] -> Producer a h ()
-fromList = mapM_ yield'
+fromList = mapM_ yield
 
 take' :: (h `Handles` PutString) => Int -> Pipe a a h ()
 take' n =
   do
     replicateM_ n $ do
-      x <- await'
-      yield' x
+      x <- await
+      yield x
     putString "You shall not pass!"
 
 [operation|PutString :: String -> ()|]
@@ -101,7 +96,7 @@ instance IOHandler a `Handles` PutString where
 printer :: (Show a, h `Handles` PutString) => Consumer a h r
 printer =
   forever $ do
-    x <- await'
+    x <- await
     putString (show x)
 
 pipeline :: (h `Handles` PutString) => Comp h ()

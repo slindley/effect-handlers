@@ -124,7 +124,7 @@
 
 module DesugarHandlers where
 
-import ParseHandlers(parseOpDef, parseHandlerDef, HandlerDef)
+import ParseHandlers(parseOpDef, parseHandlerDef, HandlerDef, OpDef, QuantifierKind(..))
 
 import Language.Haskell.TH
 import Language.Haskell.TH.Quote
@@ -318,7 +318,7 @@ operation = QuasiQuoter { quoteExp = undefined, quotePat = undefined,
 opParser :: String -> Q [Dec]
 opParser s = makeOpDefs (parseOpDef s)
 
-makeOpDefs :: (Maybe String, String, [String], String) -> Q [Dec]
+makeOpDefs :: OpDef -> Q [Dec]
 makeOpDefs (poly, name, ts, sig) = return [opType, returnInstance, opFunSig, opFun]
     where
       f = parseType sig
@@ -328,8 +328,10 @@ makeOpDefs (poly, name, ts, sig) = return [opType, returnInstance, opFunSig, opF
       
       (lift, tyvars) =
           case poly of
-            Just a ->
+            Just (Forall, a) ->
               (mkName "polyDoOp", map mkName ts ++ [mkName a])
+            Just (Exists, a) ->
+              (mkName "monoDoOp", map mkName ts ++ [mkName a])
             Nothing ->
               (mkName "doOp", map mkName ts)
       (args, result) = splitFunType f
@@ -354,14 +356,21 @@ makeOpDefs (poly, name, ts, sig) = return [opType, returnInstance, opFunSig, opF
       
       (handles, happ) =
         case poly of
-          Just _  -> (mkName "PolyHandles", ConT cname `appType` map VarT (init tyvars))
-          Nothing -> (mkName "Handles", ConT cname `appType` map VarT tyvars)
+          Just (Forall, _) ->
+              (ClassP (mkName "PolyHandles"),
+               ConT cname `appType` map VarT (init tyvars))
+          Just (Exists, _) ->
+              (\xs -> ClassP (mkName "MonoHandles") (xs ++ [VarT (last tyvars)]),
+               ConT cname `appType` map VarT (init tyvars))
+          Nothing          ->
+              (ClassP (mkName "Handles"),
+               ConT cname `appType` map VarT tyvars)
 
       opFunSig =
         SigD fname
         (ForallT
          (PlainTV h:map PlainTV tyvars)
-         [ClassP handles [VarT h, happ]]
+         [handles [VarT h, happ]]
          (makeFunType h args))
         where
           h = mkName "handler" -- HACK: hopefully "handler" is fresh
