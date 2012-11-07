@@ -10,18 +10,20 @@ import ParseCode
 --
 --import Control.Applicative ((<*>), (<*), (*>), (<$>), (<$))
 
+data OpKind = Plain | Poly | Mono
+  deriving Show
+
 {- Handler definitions -}
 type HandlerDef = (Maybe (String, Maybe String),
                    String,
                    [String],
-                   ([(String, [String])], [(String, [String])]),
+                   ([(OpKind, [(String, [String])])]),
                    String,
                    String)
 
-handlerSig :: String -> GenParser Char a [(String, [String])]
-handlerSig s =
+handlerSig :: String -> OpKind -> GenParser Char a (OpKind, [(String, [String])])
+handlerSig s k =
     do
-      spaces
       sig <-
           (do
             string s
@@ -31,9 +33,7 @@ handlerSig s =
             char '}'
             spaces
             return sig)
-           <|>
-           (return [])
-      return sig
+      return (k, sig)
 
 opSig :: GenParser Char a (String, [String])
 opSig =
@@ -62,14 +62,14 @@ handlerdef =
       string "::"
       spaces
       r <- result
-      sig <- handlerSig "handles"
-      polySig <- handlerSig "polyhandles"
+      spaces
+      sigs <- (handlerSig "handles" Plain <|> handlerSig "polyhandles" Poly <|> handlerSig "monohandles" Mono) `sepBy` spaces
       spaces
       string "where"
       many isSpaceNoNewline
       many newline
       cs <- clauses
-      return (h, name, ts, (sig, polySig), r, cs)
+      return (h, name, ts, sigs, r, cs)
 
 forward =
     do
@@ -92,12 +92,17 @@ handlerConstraint =
 
 isSpaceNoNewline = satisfy (\c -> isSpace c && c /= '\n' && c /= '\r')
 
-result = manyTill anyChar (try (lookAhead (do {many1 space; string "handles" <|> string "polyhandles" <|> string "where"})))
+result = manyTill anyChar (try (lookAhead
+                                (do {many1 space; string "handles" <|>
+                                                  string "polyhandles" <|>
+                                                  string "monohandles" <|>
+                                                  string "where"})))
 --result = manyTill anyChar (try (do {spaces; string "where"; many isSpaceNoNewline; many newline}))
 clauses = many anyChar
 
 
 data QuantifierKind = Forall | Exists
+  deriving Show
 type OpDef = (Maybe (QuantifierKind, String), String, [String], String)
 
 {- Operation definitions -}

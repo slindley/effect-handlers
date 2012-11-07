@@ -4,7 +4,9 @@
     MultiParamTypeClasses,
     TypeOperators,
     NoMonomorphismRestriction,
-    FunctionalDependencies
+    FunctionalDependencies,
+    TypeSynonymInstances,
+    FlexibleInstances
   #-}
 
 module Handlers where
@@ -62,8 +64,6 @@ class (h `MonoHandles` op) a | h op -> a where
   monoClause :: op a -> (Return (op a) -> h -> Result h) -> h -> Result h
 monoDoOp :: (h `MonoHandles` op) a => op a -> Comp h (Return (op a))
 monoDoOp op = Comp (\k h -> monoClause op k h)
-
-
 
 -- pure handlers
 data PureHandler a = PureHandler

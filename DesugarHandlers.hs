@@ -124,7 +124,7 @@
 
 module DesugarHandlers where
 
-import ParseHandlers(parseOpDef, parseHandlerDef, HandlerDef, OpDef, QuantifierKind(..))
+import ParseHandlers(parseOpDef, parseHandlerDef, HandlerDef, OpDef, QuantifierKind(..), OpKind(..))
 
 import Language.Haskell.TH
 import Language.Haskell.TH.Quote
@@ -136,6 +136,7 @@ import Language.Haskell.Exts.Extension (Extension(..))
 import qualified Language.Haskell.Meta.Parse as MetaParse
 import Language.Haskell.Meta.Syntax.Translate (toType)
 
+import Data.List
 import Data.Char(toUpper,toLower)
 
 {- Handler definitions -}
@@ -146,11 +147,15 @@ handlerParser :: String -> Q [Dec]
 handlerParser s = return (makeHandlerDef (parseHandlerDef s))
 
 makeHandlerDef :: HandlerDef -> [Dec]
-makeHandlerDef (h, name, ts, (sig, polySig), r, cs) =
+makeHandlerDef (h, name, ts, sigs, r, cs) =
   [handlerType, resultInstance] ++
-  opClauses ++ polyClauses ++ forwardClauses ++
+  opClauses ++ polyClauses ++ monoClauses ++ forwardClauses ++
   [handlerFun]
     where
+      sig     = [s | (Plain, ss) <- sigs, s <- ss]
+      polySig = [s | (Poly,  ss) <- sigs, s <- ss]
+      monoSig = [s | (Mono,  ss) <- sigs, s <- ss]
+      
       cname = mkName (let (c:cs) = name in toUpper(c) : cs)
       fname = mkName (let (c:cs) = name in toLower(c) : cs)
 
@@ -175,8 +180,9 @@ makeHandlerDef (h, name, ts, (sig, polySig), r, cs) =
       CaseE _ cases = parseExp ("case undefined of\n" ++ cs)
       
       ds = parseDecs cs
-      opClauses = map (clauseInstance False) sig
-      polyClauses = map (clauseInstance True) polySig
+      opClauses   = map (clauseInstance Plain) sig
+      polyClauses = map (clauseInstance Poly) polySig
+      monoClauses = map (clauseInstance Mono) monoSig
 
       vars i []       = []
       vars i (_:args) = mkName ("x" ++ show i) : vars (i+1) args
@@ -227,8 +233,15 @@ makeHandlerDef (h, name, ts, (sig, polySig), r, cs) =
       forwardClauses =
           case h of
             Nothing -> []
-            Just _  -> [forwardInstance False, forwardInstance True]
-
+            Just _  ->
+              [forwardInstance plainHandles []                       plain,
+               forwardInstance polyHandles  []                       poly,
+               forwardInstance monoHandles  [VarT (mkName "optype")] mono]
+              where
+                plain = parseDecs "clause     op k h = doOp op     >>= (\\x -> k x h)"
+                poly  = parseDecs "polyClause op k h = polyDoOp op >>= (\\x -> k x h)"
+                mono  = parseDecs "monoClause op k h = monoDoOp op >>= (\\x -> k x h)"
+                
       delve :: (String -> Bool) -> Pat -> Bool
       delve pred p | ConP op _ <- unWrap p = pred (nameBase op)
       
@@ -245,8 +258,9 @@ makeHandlerDef (h, name, ts, (sig, polySig), r, cs) =
           []       -> error "No return clause"
           retCases -> retCases
 
-      monoHandles = mkName "Handles"
-      polyHandles = mkName "PolyHandles"
+      plainHandles = mkName "Handles"
+      polyHandles  = mkName "PolyHandles"
+      monoHandles  = mkName "MonoHandles"
       happ = ConT cname `appType` map VarT tyvars
 
       ctx =
@@ -263,15 +277,25 @@ makeHandlerDef (h, name, ts, (sig, polySig), r, cs) =
                 ConP op (v:hs) = unWrap pat
                 ps = [v,ConP cname hs]
 
-      clauseInstance :: Bool -> (String, [String]) -> Dec
-      clauseInstance poly (opName, tvs) = InstanceD ctx (AppT (AppT handles happ) op) decs
+      clauseInstance :: OpKind -> (String, [String]) -> Dec
+      clauseInstance opKind (opName, tvs) = InstanceD ctx handles decs
           where
-            op = ConT (mkName opName) `appType` map (VarT . mkName) tvs
-            handles = ConT (if poly then polyHandles else monoHandles)
+            opType tvs = ConT (mkName opName) `appType` map (VarT . mkName) tvs
+            handles =
+              case opKind of
+                   Plain -> ConT plainHandles `appType` [happ, opType tvs]
+                   Poly  -> ConT polyHandles  `appType` [happ, opType tvs]
+                   Mono  -> ConT monoHandles  `appType` [happ, opType (init tvs), extra] 
+                     where
+                       extra = VarT (mkName (last tvs))
             
             decs = [makeClauseDec (filter (matchOp (== opName)) opCases)]
             
-            clauseName = if poly then "polyClause" else "clause"
+            clauseName =
+              case opKind of
+                   Plain -> "clause" 
+                   Poly  -> "polyClause"
+                   Mono  -> "monoClause"
             
             makeClauseDec :: [Match] -> Dec
             makeClauseDec cases = FunD (mkName clauseName) (map makeClause cases)
@@ -299,16 +323,11 @@ makeHandlerDef (h, name, ts, (sig, polySig), r, cs) =
                 (k:handlerArgs) = reverse (take (length args + 1) (reverse ps))
                 opArgs          = reverse (drop (length args + 1) (reverse ps))
 
-      forwardInstance poly =
-          InstanceD pre (AppT (AppT (ConT handles) happ) op) decs
-              where
-                op = VarT (mkName "op")
-                pre = [ClassP handles [VarT (head tyvars), op]]
-                (handles, decs) =
-                    if poly then
-                        (polyHandles, parseDecs "polyClause op k h = polyDoOp op >>= (\\x -> k x h)")
-                    else
-                        (monoHandles, parseDecs "clause op k h = doOp op >>= (\\x -> k x h)")    
+      forwardInstance handles extra decs =
+          InstanceD pre (ConT handles `appType` ([happ, op] ++ extra)) decs
+            where
+              op  = VarT (mkName "op")
+              pre = [ClassP handles ([VarT (head tyvars), op] ++ extra)]
 
 {- Operation definitions -}
 operation = QuasiQuoter { quoteExp = undefined, quotePat = undefined,
