@@ -52,6 +52,10 @@ class h `PolyHandles` op where
 polyDoOp :: (h `PolyHandles` op) => op a -> Comp h (Return (op a))
 polyDoOp op = Comp (\k h -> polyClause op k h)
 
+-- This doesn't quite work...  Apparently we require functional
+-- dependencies and undecidable instances in order to support
+-- forwarding of mono operations.
+-- 
 -- -- mono operations
 -- class h `MonoHandles` op where
 --   type Arg h op :: *

@@ -1,6 +1,6 @@
 {-# LANGUAGE TypeFamilies, NoMonomorphismRestriction, RankNTypes,
     MultiParamTypeClasses, FlexibleInstances, GADTs,
-    OverlappingInstances, QuasiQuotes, TemplateHaskell,
+    OverlappingInstances, UndecidableInstances, QuasiQuotes,
     FlexibleContexts, TypeOperators, ScopedTypeVariables, ConstraintKinds #-}
 
 import Control.Monad
