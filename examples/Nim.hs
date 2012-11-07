@@ -7,9 +7,9 @@
 -- winner is the player who takes the last stick.
 
 {-# LANGUAGE TypeFamilies, NoMonomorphismRestriction,
-             FlexibleContexts, TypeOperators,
+             FlexibleContexts, TypeOperators, UndecidableInstances,
              FlexibleInstances, MultiParamTypeClasses, OverlappingInstances,
-             TemplateHaskell, QuasiQuotes
+             QuasiQuotes
   #-}
 
 import Data.List
