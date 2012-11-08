@@ -159,7 +159,7 @@ makeHandlerDef (h, name, ts, sigs, r, cs) =
       cname = mkName (let (c:cs) = name in toUpper(c) : cs)
       fname = mkName (let (c:cs) = name in toLower(c) : cs)
 
-      (args, result') = splitFunType (parseType r)
+      (args, result') = splitFunType True (parseType (r ++ " -> ()"))
       (tyvars, constraint, result) =
         case h of
           Just (h, c) -> ([h'] ++ map mkName ts, c, result)
@@ -340,7 +340,7 @@ opParser s = makeOpDefs (parseOpDef s)
 makeOpDefs :: OpDef -> Q [Dec]
 makeOpDefs (poly, name, ts, sig) = return [opType, returnInstance, opFunSig, opFun]
     where
-      f = parseType sig
+      (args, result) = splitFunType True (parseType (sig ++ " -> ()"))
 
       cname = mkName (let (c:cs) = name in toUpper(c) : cs)
       fname = mkName (let (c:cs) = name in toLower(c) : cs)
@@ -353,7 +353,6 @@ makeOpDefs (poly, name, ts, sig) = return [opType, returnInstance, opFunSig, opF
               (mkName "monoDoOp", map mkName ts ++ [mkName a])
             Nothing ->
               (mkName "doOp", map mkName ts)
-      (args, result) = splitFunType f
       opType =
           case args of
             [_] ->
@@ -438,16 +437,24 @@ appExp f (e:es) = appExp (AppE f e) es
 appType f []     = f
 appType f (t:ts) = appType (AppT f t) ts
 
-splitFunType :: Type -> ([Type], Type)
-splitFunType f = (reverse ts, t)
+splitFunType :: Bool -> Type -> ([Type], Type)
+splitFunType dummy f = (reverse ts, massageUnit t)
     where
-      (t : ts) = split [] f
+      (t : ts) =
+          if dummy then
+              -- ignore the dummy return type
+              tail (split [] f)
+          else
+              split [] f
 
-      split :: [Type] -> Type -> [Type]
-      split ts (AppT (AppT ArrowT t) body) = split (t:ts) body
       -- HACK: GHC.Type.() is what gets parsed for "()", and that
       -- leads to kinding problems. We should really look for units
       -- elsewhere in types.  This might be a bug in the parseType
       -- function.
-      split ts (ConT name) | nameBase name == "()" = (TupleT 0:ts)
+      massageUnit (ConT name) | nameBase name == "()" = TupleT 0
+      massageUnit t = t
+
+      split :: [Type] -> Type -> [Type]
+      split ts (AppT (AppT ArrowT t) body) = split (t:ts) body
       split ts t = (t:ts)
+
