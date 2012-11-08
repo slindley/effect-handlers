@@ -82,24 +82,24 @@ type instance Result (IOHandler a) = IO a
 handleIO :: Comp (IOHandler a) a -> IO a
 handleIO comp = handle comp (\x _ -> return x) IOHandler 
 
-data Get s = Get
-type instance Return (Get s) = s
-get = doOp Get
+-- data Get s = Get
+-- type instance Return (Get s) = s
+-- get = doOp Get
 
-newtype Put s = Put s
-type instance Return (Put s) = ()
-put s = doOp (Put s)
+-- newtype Put s = Put s
+-- type instance Return (Put s) = ()
+-- put s = doOp (Put s)
 
---type State s a = (h `Handles` Get s, h `Handles` Put s) => Comp h a
+-- --type State s a = (h `Handles` Get s, h `Handles` Put s) => Comp h a
 
-newtype StateHandler s a = StateHandler s
-type instance Result (StateHandler s a) = a
-instance (StateHandler s a `Handles` Get s) where
-  clause Get k (StateHandler s) = k s (StateHandler s)
-instance (StateHandler s a `Handles` Put s) where
-  clause (Put s) k _ = k () (StateHandler s)
+-- newtype StateHandler s a = StateHandler s
+-- type instance Result (StateHandler s a) = a
+-- instance (StateHandler s a `Handles` Get s) where
+--   clause Get k (StateHandler s) = k s (StateHandler s)
+-- instance (StateHandler s a `Handles` Put s) where
+--   clause (Put s) k _ = k () (StateHandler s)
 
-countTest =
-    do {n <- get;
-        if n == (0 :: Int) then return ()
-        else do {put (n-1); countTest}}
+-- countTest =
+--     do {n <- get;
+--         if n == (0 :: Int) then return ()
+--         else do {put (n-1); countTest}}
