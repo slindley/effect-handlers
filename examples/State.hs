@@ -46,6 +46,19 @@ type SComp s a =
       Put     s  k  r -> do {writeIORef r s; k () r}
 |]
 
+comp0 :: SComp String String
+comp0 = do {  x <- get; put ("zig-" ++ x);
+              y <- get; put (y ++ ":" ++ y); get}
+testa = monadicState "zag" comp0
+testb = simpleState "zag" comp0
+testc = logState [] "zag" comp0
+testd = do {r <- newIORef "zag"; iORefState r comp0}
+
+-- overloaded literals hit us here...
+--
+-- This problem can be avoided by using existential operations as in
+-- MonoState.hs.
+
 comp1 :: SComp Int Int
 comp1 = do {  (x::Int) <- get; put (x+1);
               (y::Int) <- get; put (y+y); get}
