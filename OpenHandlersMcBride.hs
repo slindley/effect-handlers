@@ -5,42 +5,42 @@
     TypeOperators,
     NoMonomorphismRestriction #-}
 
-module OpenHandlers where
+module OpenHandlersMcBride where
 
 type family Return op :: *
 type family Result h :: *
 
 class Handles h op where
-  clause :: op -> h -> (Return op -> Comp h (Result h)) -> Result h
+  clause :: op -> (Return op -> Comp h (Result h)) -> h -> Result h
 
-newtype Comp h a = Comp {handle :: h -> (h -> a -> Result h) -> Result h}
+newtype Comp h a = Comp {handle :: (a -> h -> Result h) -> h -> Result h}
 
 instance Monad (Comp h) where
-  return v     = Comp (\h k -> k h v)
-  Comp c >>= f = Comp (\h k -> c h (\h' x -> handle (f x) h' k))
+  return v     = Comp (\k h -> k v h)
+  Comp c >>= f = Comp (\k h -> c (\x h' -> handle (f x) k h') h)
 
 instance Functor (Comp h) where
   fmap f c = c >>= \x -> return (f x)
 
 doOp :: (h `Handles` op) => op -> Comp h (Return op)
-doOp op = Comp (\h k -> clause op h (\x -> return (k h x)))
+doOp op = Comp (\k h -> clause op (\x -> return (k x h)) h)
 
-forward :: (h `Handles` op) => op -> h' -> (h' -> Return op -> Comp h a) -> Comp h a
-forward op h k = doOp op >>= k h
+-- forward :: (h `Handles` op) => op -> h' -> (h' -> Return op -> Comp h a) -> Comp h a
+-- forward op h k = doOp op >>= k h
 
 -- polymorphic operations
 class (h `PolyHandles` op) where
-  polyClause :: op a -> h -> (h -> Return (op a) -> Comp h (Result h)) -> Result h
+  polyClause :: op a -> (Return (op a) -> h -> Comp h (Result h)) -> h -> Result h
 
 polyDoOp :: (h `PolyHandles` op) => op a -> Comp h (Return (op a))
-polyDoOp op = Comp (\h k -> polyClause op h (\h x -> return (k h x)))
+polyDoOp op = Comp (\k h -> polyClause op (\x h -> return (k x h)) h)
 
 -- pure handlers
 data PureHandler a = PureHandler
 type instance Result (PureHandler a) = a
 
 handlePure :: Comp (PureHandler a) a -> a
-handlePure c = handle c PureHandler (const id)
+handlePure c = handle c (\x _ -> x) PureHandler 
 
 data Get s = Get
 type instance Return (Get s) = s
@@ -53,11 +53,10 @@ put s = doOp (Put s)
 newtype StateHandler s a = StateHandler s
 type instance Result (StateHandler s a) = a
 instance (StateHandler s a `Handles` Put s) where
-  clause (Put s) h k = stateHandler s (k ())
+  clause (Put s) k h = stateHandler s (k ())
 instance (StateHandler s a `Handles` Get s) where
-  clause Get (StateHandler s) k = stateHandler s (k s)
-stateHandler s comp = handle comp (StateHandler s) (const id)
-
+  clause Get k (StateHandler s) = stateHandler s (k s)
+stateHandler s comp = handle comp (\x _ -> x) (StateHandler s)
 
 countTest =
     do {n <- get;
