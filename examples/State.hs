@@ -18,6 +18,14 @@ type SComp s a =
   (h `Handles` Get s, h `Handles` Put s) => Comp h a
 
 [handler|
+  MonadicStateUnparameterised s a :: (s -> (a, s))
+    handles {Get s, Put s} where
+      Return  x     -> \s -> (x, s)
+      Get        k  -> \s -> k s  s
+      Put     s  k  -> \_ -> k () s
+|] 
+
+[handler|
   MonadicState s a :: s -> (a, s)
     handles {Get s, Put s} where
       Return  x     s -> (x, s)
