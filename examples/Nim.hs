@@ -29,6 +29,9 @@ data Player = Alice | Bob
 -- chooses to take.
 [operation|Move :: Player -> Int -> Int|]
 
+-- We model the rules of the game as an abstract computation over the
+-- Move operation returning the winner.
+
 -- a game parameterised by the number of starting sticks
 game :: (h `Handles` Move) => Int -> Comp h Player
 game = aliceTurn

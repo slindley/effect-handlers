@@ -1,153 +1,82 @@
--- Handlers for polymorphic effects
+{- Fully general open handlers making essential use of DataKinds -}
+
+{-# LANGUAGE TypeFamilies,
+    MultiParamTypeClasses,
+    GADTs,
+    TypeOperators,
+    RankNTypes,
+    FunctionalDependencies,
+    TypeSynonymInstances,
+    FlexibleInstances,
+    FlexibleContexts,
+    ScopedTypeVariables,
+    DataKinds
+  #-}
+
+module PolyHandlers where
+
+type family Return (opApp :: *) :: *
+type family Result (h :: *) :: *
+class ((h :: *) `Handles` (op :: [*] -> [*] -> *)) (es :: [*]) | h op -> es where
+  clause :: op es us -> (Return (op es us) -> h -> Result h) -> h -> Result h
+newtype Comp h a = Comp {handle :: (a -> h -> Result h) -> h -> Result h}
+doOp :: (h `Handles` op) es => op es us -> Comp h (Return (op es us))
+doOp op = Comp (\k h -> clause op k h)
+-- doOp op = Comp (\k -> clause op k)
+-- doOp op = Comp (clause op)
+-- doOp    = Comp . clause
+-- We are careful not to use this equivalent implementation because it
+-- leads to an enormous slow-down. Pointless programming in GHC is
+-- dangerous!
 --
--- By making the signatures of effect operations polymorphic we
--- can use shift at different types in the same reset.
+-- doOp = Comp . clause
 
-{-# LANGUAGE GADTs, TypeFamilies,
-    MultiParamTypeClasses,FlexibleInstances,
-    OverlappingInstances, FlexibleContexts,
-    TypeOperators, RankNTypes, ImpredicativeTypes, NoMonomorphismRestriction #-}
+instance Monad (Comp h) where
+  return v     = Comp (\k h -> k v h)
+  Comp c >>= f = Comp (\k h -> c (\x h' -> handle (f x) k h') h)
 
-module Handlers where
-
-import TypeNeq ((:=/=:))
-
--- Operations live in the Op type class.
---   Param is the parameter type of the operation.
---   Return is the return type of the operation.
-class Op op where
-  type Param op :: * -> *
-  type Return op :: * -> *
-
--- Each instance of Op should be a singleton type whose inhabitant
--- acts as a proxy for the type.
-
--- An effect e is a heterogeneous list, that is tuple, of operation
--- types.
-
--- a type class for effect non-membership
-class Op op => op `NotIn` e where  
-instance Op op => op `NotIn` ()
-instance (op :=/=: op', op `NotIn` e) => op `NotIn` (op', e)
-
--- a witness to the proof that op is in e
-data Witness op e where
-  Here  :: Witness op (op, e)
-  There :: Witness op e -> Witness op (op', e)
-
--- We could implement this kind of hack to make error messages
--- slightly more illuminating.
---
--- class Error x
--- data OpNotFound op e
--- data OpFound op e
---
--- instance (Error (OpFound op (op, e)), Op op) => op `NotIn` (op, e)
--- instance (Error (OpNotFound op e), op `NotIn` e, Op op) => op `In` e where
---   makeWitness = undefined
-
--- a type class for effect membership
--- that can construct membership witnesses
-class Op op => op `In` e where
-  makeWitness :: Witness op e
-instance (Op op, op `NotIn` e) => op `In` (op, e) where
-  makeWitness = Here
-instance (op :=/=: op', op `In` e) => op `In` (op', e) where
-  makeWitness = There makeWitness
-
--- Computations of type a
---   Ret v:      return value v
---   Op w m p k: operation with witness w, name m, parameter p, continuation k
-data Comp e a :: * where
-  Ret :: a -> Comp e a
-  App :: Witness op e -> op -> Param op u ->
-          (Return op u -> Comp e a) -> Comp e a
-
-instance Monad (Comp e) where
-  return = Ret
-  (Ret v)        >>= k = k v
-  (App w m p k') >>= k = App w m p (\v -> k' v >>= k)
-
-instance Functor (Comp e) where
-  fmap f c = c >>= return . f
-
--- direct style operation application
-applyOp :: (op `In` e) => op -> Param op u -> Comp e (Return op u)
-applyOp m p = App makeWitness m p return
-
--- the first component of OpClause is redundant
--- but it eases type inference and makes the connection
--- with the operational semantics blindingly obvious
-type OpClause op a = (op, OpAbs op a)
-type RetClause a b = a -> b
-
-type OpAbs op a = forall u.Param op u -> (Return op u -> a) -> a
-
-(|->) :: Op op => op -> OpAbs op a -> OpClause op a
-(|->) = (,)
-infix 2 |-> 
-
-infixr 1 :<:
--- An op handler represents a collection of operation clauses.
-data OpHandler e a where
-  Empty :: OpHandler () a
-  (:<:) :: (op `NotIn` e) => OpClause op a -> OpHandler e a -> OpHandler (op, e) a
-
-type Handler a e b = (OpHandler e b, RetClause a b)
-
--- handleOp w p k h
---
---   handle the operation at the position in op handler h denoted by
---   the witness w with parameter p and continuation k
-handleOp :: Witness op e -> OpHandler e a -> OpAbs op a
-handleOp Here      ((_, f) :<: _) = f
-handleOp (There w) (_ :<: h) = handleOp w h
-
-handle :: Comp e a -> Handler a e b -> b
-handle (Ret v)       (h, r) = r v
-handle (App w _ p k) (h, r) = handleOp w h p k'
-  where k' v = handle (k v) (h, r)
-
--- an operation clause that throws op
-throw :: (op `In` e) => op -> OpClause op (Comp e a)
-throw m = (m, App makeWitness m)
-
-infixr 1 -:<:
--- m -:<: h
---
---   extends h by throwing the effect e to be handled by an outer
---   handler
---
--- (op is a singleton type and m is its instance)
-(-:<:) :: (op `NotIn` e, op `In` e') =>
-            op -> OpHandler e (Comp e' a) -> OpHandler (op, e) (Comp e' a)
-m -:<: h = throw m :<: h
+instance Functor (Comp h) where
+  fmap f c = c >>= \x -> return (f x)
 
 
-newtype ShiftParam r e a = SP {unSP :: (a -> r) -> Comp (Shift r e, e) r}
-newtype ShiftReturn a    = SR {unSR :: a}
+-- pure handlers
+data PureHandler a = PureHandler
+type instance Result (PureHandler a) = a
 
-data Shift r e = Shift
-instance Op (Shift r e) where
-  type Param (Shift r e)  = ShiftParam r e
-  type Return (Shift r e) = ShiftReturn
+handlePure :: Comp (PureHandler a) a -> a
+handlePure comp = handle comp (\x _ -> x) PureHandler
 
-shift :: (Shift r e `In` e') => ((a -> r) -> Comp (Shift r e, e) r) -> Comp e' a
-shift k = fmap unSR (applyOp Shift (SP k))
+data IOHandler a = IOHandler
+type instance Result (IOHandler a) = IO a
 
-shift' :: (Shift r e `NotIn` e) =>
-          ((a -> r) -> Comp (Shift r e, e) r) -> Comp (Shift r e, e) a
-shift' = shift
+handleIO :: Comp (IOHandler a) a -> IO a
+handleIO comp = handle comp (\x _ -> return x) IOHandler 
 
-reset :: Comp (Shift r (), ()) r -> r
-reset = resetH Empty
+data Get (s :: [*]) (t :: [*]) where
+  Get :: Get '[s] '[]
+type instance Return (Get '[s] '[]) = s
+get :: ((h `Handles` Get) '[s]) => Comp h s
+get = doOp Get
 
-resetH :: (Shift r e `NotIn` e) => OpHandler e r -> Comp (Shift r e, e) r -> r
-resetH h c = handle c (Shift |-> (\p k -> resetH h (unSP p (\x -> k (SR x)))) :<: h, id)
+data Put (s :: [*]) (t :: [*]) where
+  Put :: s -> Put '[s] '[]
+type instance Return (Put '[s] '[]) = ()
+put :: ((h `Handles` Put) '[s]) => s -> Comp h ()
+put s = doOp (Put s)
 
-test0 = do {f <- shift' (\k -> return (k (k (k 7)))); return ((f * 2) + 1)}
+-- [handles| h {Get s, Put s}|]
 
--- notice that we shift at type Bool and at type Int in the same computation
-test1 = do x <- shift' (\k -> do y <- shift' (\k -> return $ k True + k False)
-                                 return (if y then k 2 else k 3))
-           return $ 1 + x
+type SComp s a = ((h `Handles` Get) '[s], (h `Handles` Put) '[s]) => Comp h a
+
+newtype StateHandler (s :: *) (a :: *) = StateHandler s
+type instance Result (StateHandler s a) = a
+instance ((StateHandler s a `Handles` Get) '[s]) where
+  clause Get k (StateHandler s) = k s (StateHandler s)
+instance ((StateHandler s a `Handles` Put) '[s]) where
+  clause (Put s) k _ = k () (StateHandler s)
+
+countTest :: () -> SComp Int ()
+countTest () =
+    do {n <- get;
+        if n == 0 then return ()
+        else do {put (n-1); countTest ()}}
