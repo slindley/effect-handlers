@@ -12,15 +12,16 @@ top stop =
 
 chunk :: GenParser Char a String -> GenParser Char a String
 chunk stop =
-    let openers = "([{\"'" in
+    let openers = "([{\"" in
     do
       s <- manyTill (noneOf openers) (try $ (lookAhead (oneOf openers) >> return "") <|> (lookAhead stop))
       s' <- (block <|> do {try $ lookAhead stop; return ""})
       return $ s ++ s'
 
+-- disable single quotes because they can be used in names...
 block :: GenParser Char a String
-block = paren <|> bracket <|> brace <|> double <|> single
- 
+block = paren <|> bracket <|> brace <|> double -- <|> single
+
 paren :: GenParser Char a String
 paren = group '(' ')'
 
@@ -40,7 +41,7 @@ group open close =
 
 groupBody :: GenParser Char a String
 groupBody =
-    let boring = noneOf "()[]{}\"'\\" in
+    let boring = noneOf "()[]{}\"\\" in
     do
       ss <- many $ try $ do {s <- many $ boring; s' <- block; return $ s ++ s'}
       s <- many boring
@@ -49,8 +50,8 @@ groupBody =
 double :: GenParser Char a String
 double = quote '"'
 
-single :: GenParser Char a String
-single = quote '\''
+-- single :: GenParser Char a String
+-- single = quote '\''
 
 quote :: Char -> GenParser Char a String
 quote q =

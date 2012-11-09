@@ -150,62 +150,62 @@ makeHandlerDef :: HandlerDef -> Q [Dec]
 makeHandlerDef (h, name, ts, sigs, r, cs) =
   do 
     let sig     = [s | (Plain, ss) <- sigs, s <- ss]
-    let polySig = [s | (Poly,  ss) <- sigs, s <- ss]
-    let monoSig = [s | (Mono,  ss) <- sigs, s <- ss]
-      
-    let cname = mkName (let (c:cs) = name in toUpper(c) : cs)
-    let fname = mkName (let (c:cs) = name in toLower(c) : cs)
-
-    let (args, result') = splitFunType (parseType r)
-    let (tyvars, constraint, result) =
+        polySig = [s | (Poly,  ss) <- sigs, s <- ss]
+        monoSig = [s | (Mono,  ss) <- sigs, s <- ss]
+        
+        cname = mkName (let (c:cs) = name in toUpper(c) : cs)
+        fname = mkName (let (c:cs) = name in toLower(c) : cs)
+        
+        (args, result') = splitFunType (parseType r)
+        (tyvars, constraint, result) =
           case h of
             Just (h, c) -> ([h'] ++ map mkName ts, c, result)
               where
                 h' = mkName h
                 result = appType (ConT (mkName "Comp")) [VarT h', result']
             Nothing     -> (map mkName ts, Nothing, result')
-      
-    let plainHandles = mkName "Handles"
-    let polyHandles  = mkName "PolyHandles"
-    let monoHandles  = mkName "MonoHandles"
-    let happ = ConT cname `appType` map VarT tyvars
-    
-    let handlerType =
+        
+        plainHandles = mkName "Handles"
+        polyHandles  = mkName "PolyHandles"
+        monoHandles  = mkName "MonoHandles"
+        happ = ConT cname `appType` map VarT tyvars
+        
+        handlerType =
           DataD [] cname
                     (map PlainTV tyvars)
                     [NormalC cname (map (\arg -> (NotStrict, arg)) args)]
                     []
-    let resultInstance =
+        resultInstance =
           TySynInstD (mkName "Result")
           [appType (ConT cname) (map VarT tyvars)] result
-      
-    let CaseE _ cases = parseExp ("case undefined of\n" ++ cs)
-      
-    let unWrap :: Pat -> Pat
+        
+        CaseE _ cases = parseExp ("case undefined of\n" ++ cs)
+        
+        unWrap :: Pat -> Pat
         unWrap (ParensP p) = unWrap p
         unWrap p           = p
-
+        
         delve :: (String -> Bool) -> Pat -> Bool
         delve pred p | ConP op _ <- unWrap p = pred (nameBase op)
-
+        
         matchOp :: (String -> Bool) -> Match -> Bool
         matchOp pred (Match pat _ _) = delve pred pat
-    
-    let opCases = filter (matchOp (/= "Return")) cases
-    let retCases =
+        
+        opCases = filter (matchOp (/= "Return")) cases
+        retCases =
           case filter (matchOp (== "Return")) cases of
             []       -> error "No return clause"
             retCases -> retCases
-
-    
-    let clauseInstance :: OpKind -> (String, [String]) -> Q Dec
+        
+        
+        clauseInstance :: OpKind -> (String, [String]) -> Q Dec
         clauseInstance opKind (opName, tvs) =
           do
             let ctx =
                   case constraint of
                     Nothing -> []
                     Just s | ForallT [] ctx _ <- parseType (s ++ " => ()") -> ctx
-
+        
                 opType tvs = ConT (mkName opName) `appType` map (VarT . mkName) tvs
                 handles =
                   case opKind of
@@ -242,7 +242,7 @@ makeHandlerDef (h, name, ts, sigs, r, cs) =
                                   (NormalB (appExp (VarE k') [VarE v, appExp (ConE cname) (map VarE hs)]))
                                   []]) : wdecs
                     return (Clause ps body wdecs')
-
+        
                   
                 split :: [Pat] -> ([Pat], Pat, [Pat])
                 split ps = (opArgs, k, handlerArgs)
@@ -253,7 +253,7 @@ makeHandlerDef (h, name, ts, sigs, r, cs) =
             decs <- makeClauseDecs (filter (matchOp (== opName)) opCases)          
             return (InstanceD ctx handles decs)
             
-    let retDec = FunD (mkName "ret") (map makeClause retCases)
+        retDec = FunD (mkName "ret") (map makeClause retCases)
           where
             makeClause :: Match -> Clause
             makeClause (Match pat body wdecs) =
@@ -261,14 +261,14 @@ makeHandlerDef (h, name, ts, sigs, r, cs) =
                 where
                   ConP op (v:hs) = unWrap pat
                   ps = [v,ConP cname hs]
-
-    let forwardInstance handles extra decs =
+        
+        forwardInstance handles extra decs =
           InstanceD pre (ConT handles `appType` ([happ, op] ++ extra)) decs
             where
               op  = VarT (mkName "op")
               pre = [ClassP handles ([VarT (head tyvars), op] ++ extra)]
-    
-    let ds = parseDecs cs
+        
+        ds = parseDecs cs
     opClauses   <- mapM (clauseInstance Plain) sig
     polyClauses <- mapM (clauseInstance Poly) polySig
     monoClauses <- mapM (clauseInstance Mono) monoSig
@@ -313,7 +313,6 @@ makeHandlerDef (h, name, ts, sigs, r, cs) =
                              appExp (ConE cname) (map VarE xs)])
         return (FunD fname [Clause (handlerArgs ++ [VarP comp]) body [retDec]])
           
-    let foo = undefined
     -- If this is a forwarding handler then generate the appropriate
     -- type class instances to forward monomorphic and polymorphic
     -- operations to the parent handler.
