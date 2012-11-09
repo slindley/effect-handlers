@@ -4,7 +4,7 @@
     MultiParamTypeClasses,
     GADTs,
     TypeOperators,
---    NoMonomorphismRestriction,
+    RankNTypes,
     FunctionalDependencies,
     TypeSynonymInstances,
     FlexibleInstances,
