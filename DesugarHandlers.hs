@@ -144,13 +144,13 @@ handler = QuasiQuoter { quoteExp = undefined, quotePat = undefined,
                         quoteType = undefined, quoteDec = handlerParser}
 
 handlerParser :: String -> Q [Dec]
-handlerParser s = return (makeHandlerDef (parseHandlerDef s))
+handlerParser s = makeHandlerDef (parseHandlerDef s)
 
-makeHandlerDef :: HandlerDef -> [Dec]
+makeHandlerDef :: HandlerDef -> Q [Dec]
 makeHandlerDef (h, name, ts, sigs, r, cs) =
-  [handlerType, resultInstance] ++
-  opClauses ++ polyClauses ++ monoClauses ++ forwardClauses ++
-  [handlerFun]
+  return ([handlerType, resultInstance] ++
+          opClauses ++ polyClauses ++ monoClauses ++ forwardClauses ++
+          [handlerFun])
     where
       sig     = [s | (Plain, ss) <- sigs, s <- ss]
       polySig = [s | (Poly,  ss) <- sigs, s <- ss]
@@ -338,14 +338,14 @@ opParser :: String -> Q [Dec]
 opParser s = makeOpDefs (parseOpDef s)
 
 makeOpDefs :: OpDef -> Q [Dec]
-makeOpDefs (poly, name, ts, sig) = return [opType, returnInstance, opFunSig, opFun]
-    where
-      f = parseType sig
+makeOpDefs (poly, name, ts, sig) =
+  do
+    let f = parseType sig
 
-      cname = mkName (let (c:cs) = name in toUpper(c) : cs)
-      fname = mkName (let (c:cs) = name in toLower(c) : cs)
+    let cname = mkName (let (c:cs) = name in toUpper(c) : cs)
+    let fname = mkName (let (c:cs) = name in toLower(c) : cs)
       
-      (lift, tyvars) =
+    let (lift, tyvars) =
           case poly of
             Just (Forall, a) ->
               (mkName "polyDoOp", map mkName ts ++ [mkName a])
@@ -353,8 +353,8 @@ makeOpDefs (poly, name, ts, sig) = return [opType, returnInstance, opFunSig, opF
               (mkName "monoDoOp", map mkName ts ++ [mkName a])
             Nothing ->
               (mkName "doOp", map mkName ts)
-      (args, result) = splitFunType f
-      opType =
+    let (args, result) = splitFunType f
+    let opType =
           case args of
             [_] ->
                 NewtypeD [] cname
@@ -366,41 +366,38 @@ makeOpDefs (poly, name, ts, sig) = return [opType, returnInstance, opFunSig, opF
                     (map PlainTV tyvars)
                     [NormalC cname (map (\arg -> (NotStrict, arg)) args)]
                     []
-      returnInstance =
+    let returnInstance =
           TySynInstD (mkName "Return")
-                         [appType (ConT cname) (map VarT tyvars)] result
-      xs = vars 0 args
-      vars i []       = []
-      vars i (_:args) = mkName ("x" ++ show i) : vars (i+1) args
-      
-      (handles, happ) =
-        case poly of
-          Just (Forall, _) ->
+          [appType (ConT cname) (map VarT tyvars)] result
+    xs <- mapM (\_ -> newName "x") args
+    let (handles, happ) =
+          case poly of
+            Just (Forall, _) ->
               (ClassP (mkName "PolyHandles"),
                ConT cname `appType` map VarT (init tyvars))
-          Just (Exists, _) ->
+            Just (Exists, _) ->
               (\xs -> ClassP (mkName "MonoHandles") (xs ++ [VarT (last tyvars)]),
                ConT cname `appType` map VarT (init tyvars))
-          Nothing          ->
+            Nothing          ->
               (ClassP (mkName "Handles"),
                ConT cname `appType` map VarT tyvars)
-
-      opFunSig =
-        SigD fname
-        (ForallT
-         (PlainTV h:map PlainTV tyvars)
-         [handles [VarT h, happ]]
-         (makeFunType h args))
-        where
-          h = mkName "handler" -- HACK: hopefully "handler" is fresh
-      makeFunType h [] = appType (ConT (mkName "Comp")) [VarT h, result]
-      makeFunType h (t:ts) = AppT (AppT ArrowT t) (makeFunType h ts)
-      opFun =
-          FunD fname
-               [Clause (map VarP xs)
-                (NormalB (AppE
-                          (VarE lift)
-                          (appExp (ConE cname) (map VarE xs)))) []]
+    opFunSig <-
+      do
+        h <- newName "handler"
+        let makeFunType h [] = appType (ConT (mkName "Comp")) [VarT h, result]
+            makeFunType h (t:ts) = AppT (AppT ArrowT t) (makeFunType h ts)
+        return (SigD fname
+                (ForallT
+                 (PlainTV h:map PlainTV tyvars)
+                 [handles [VarT h, happ]]
+                 (makeFunType h args)))
+          
+    let opFun = FunD fname
+                [Clause (map VarP xs)
+                 (NormalB (AppE
+                           (VarE lift)
+                           (appExp (ConE cname) (map VarE xs)))) []]
+    return [opType, returnInstance, opFunSig, opFun]
 
 {- Utilities -}
 
