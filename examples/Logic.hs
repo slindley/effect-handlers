@@ -9,20 +9,67 @@ import Control.Monad
 import Handlers
 import DesugarHandlers
 
-[operation|forall a.Fail :: a|]
-[operation|forall a.Choose :: [a] -> a|]
+[operation|forall a.Failure ::        a|]
+[operation|forall a.Choose  :: [a] -> a|]
 
-type Logic a = (h `PolyHandles` Fail, h `PolyHandles` Choose) => Comp h a
-
+type Logic a = (h `PolyHandles` Failure, h `PolyHandles` Choose) => Comp h a
 
 [handler|
-  forward h.  LHandler a ::  [ a ]
-    polyhandles {Fail, Choice} where
-      Fail _ -> return []
-      Choice l k -> mapM k l
-      Return x            -> return [x]
+  forward h.AllHandler a :: [a]
+    polyhandles {Failure, Choose} where
+      Failure     k -> return []
+      Choose l k -> do {xss <- mapM k l; return (join xss)}
+      Return x   -> return [x]
 |]
+allResults :: Logic a -> Comp h [a] 
+allResults comp = allHandler comp
 
-allResults :: Logic a -> Comp h a 
-allResults comp = lHandler comp
+[handler|
+  forward h.MaybeHandler a :: Maybe a
+    polyhandles {Failure, Choose} where
+      Failure  k -> return Nothing
+      Choose l k -> foldM (\m a ->
+                             case m of
+                               Nothing -> k a
+                               m       -> return m) Nothing l
+      Return x   -> return (Just x)
+|]
+maybeResults :: Logic a -> Comp h (Maybe a)
+maybeResults comp = maybeHandler comp
 
+data Stack h a = Stack ([Stack h a -> Comp h a])
+[handler|
+  forward h.(h `PolyHandles` Failure) => FirstHandler a :: Stack h a -> a
+    polyhandles {Failure, Choose} where
+      Failure       k (Stack [])     -> failure
+      Failure       k (Stack (x:xs)) -> x (Stack xs)
+      Choose (a:as) k (Stack l)      -> k a (Stack (map k as ++ l))
+      Return x        _              -> return x
+|]
+firstResult :: (h `PolyHandles` Failure) => Logic a -> Comp h a
+firstResult comp = firstHandler (Stack []) comp
+
+[handler|
+  IterativeHandler a :: Int -> (Bool, [a])
+    polyhandles {Failure, Choose} where
+      Failure  k i -> (False, [])
+      Choose l k i -> if i == 0 then (True, [])
+                      else
+                        let (bs, xss) = unzip (map (\x -> k x $! i-1) l) in
+                        (any id bs, concat xss)
+      Return x   i -> if i == 0 then (False, [x]) else (False, [])
+|]
+iterativeResults :: Logic a -> [[a]]
+iterativeResults comp =
+  foldr
+    (\(b, xs) xss -> xs:(if b then xss else []))
+    []
+   (map (\i -> iterativeHandler i comp) [0..])
+
+test1 :: Logic [Int]
+test1 =
+  do
+    i <- choose [1..10]
+    j <- choose [1..10]
+    if (i+j) `mod` 2 == 0 then failure
+      else return [i, j]
