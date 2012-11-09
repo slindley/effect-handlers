@@ -1,4 +1,4 @@
-{- Parameterised open handlers as a continuation monad -}
+{- Fully general open handlers making essential use of DataKinds -}
 
 {-# LANGUAGE TypeFamilies,
     MultiParamTypeClasses,

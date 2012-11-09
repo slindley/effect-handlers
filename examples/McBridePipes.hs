@@ -16,6 +16,9 @@ newtype Yield = Yield Int
 type instance Return Yield = ()
 yield s = doOp (Yield s)
 
+-- Comp (Up h a) a           becomes  Prod (Cons r -> r)
+-- Int -> Comp (Down h a) a  becomes  Cons (Int -> Prod r -> r)
+
 newtype Down h a = Down (Comp (Up h a) a)
 type instance Result (Down h a) = Comp h a
 type instance Inner  (Down h a) = a
