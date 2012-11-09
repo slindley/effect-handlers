@@ -18,18 +18,18 @@ import PolyHandlers
 
 type LChar = Maybe Char
 
-data GetC (s :: [*]) (t :: [*]) where
-  GetC :: GetC '[] '[]
-type instance Return (GetC '[] '[]) = LChar
-getC :: ((h `Handles` GetC) '[]) => Comp h LChar
+data GetC (s :: ()) (t :: ()) where
+  GetC :: GetC '() '()
+type instance Return (GetC '() '()) = LChar
+getC :: ((h `Handles` GetC) '()) => Comp h LChar
 getC = doOp GetC
 
-type I a = forall h.((h `Handles` GetC) '[]) => Comp h a
+type I a = forall h.((h `Handles` GetC) '()) => Comp h a
 
 data EnStrHandler (h :: *) (a :: *) = EnStrHandler String
 type instance Result (EnStrHandler h a) = Comp h a
 
-instance ((h `Handles` GetC) '[]) => ((EnStrHandler h a `Handles` GetC) '[]) where
+instance ((h `Handles` GetC) '()) => ((EnStrHandler h a `Handles` GetC) '()) where
   clause GetC k (EnStrHandler "")    = do {c <- getC; k c (EnStrHandler "")}
   clause GetC k (EnStrHandler (c:t)) = k (Just c) (EnStrHandler t)
 
@@ -43,7 +43,7 @@ en_str s comp = handle comp (\x _ -> return x) (EnStrHandler s)
                      
 data PureRunHandler (a :: *) = PureRunHandler
 type instance Result (PureRunHandler a) = a
-instance ((PureRunHandler a `Handles` GetC) '[]) where
+instance ((PureRunHandler a `Handles` GetC) '()) where
   clause GetC k h = k Nothing h
 pureRun :: I a -> a
 pureRun comp = handle comp (\x _ -> x) PureRunHandler

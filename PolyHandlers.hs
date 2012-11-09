@@ -10,17 +10,18 @@
     FlexibleInstances,
     FlexibleContexts,
     ScopedTypeVariables,
-    DataKinds
+    DataKinds,
+    PolyKinds
   #-}
 
 module PolyHandlers where
 
 type family Return (opApp :: *) :: *
 type family Result (h :: *) :: *
-class ((h :: *) `Handles` (op :: [*] -> [*] -> *)) (es :: [*]) | h op -> es where
-  clause :: op es us -> (Return (op es us) -> h -> Result h) -> h -> Result h
+class ((h :: *) `Handles` (op :: j -> k -> *)) (e :: j) | h op -> e where
+  clause :: op e u -> (Return (op e u) -> h -> Result h) -> h -> Result h
 newtype Comp h a = Comp {handle :: (a -> h -> Result h) -> h -> Result h}
-doOp :: (h `Handles` op) es => op es us -> Comp h (Return (op es us))
+doOp :: (h `Handles` op) e => op e u -> Comp h (Return (op e u))
 doOp op = Comp (\k h -> clause op k h)
 -- doOp op = Comp (\k -> clause op k)
 -- doOp op = Comp (clause op)
@@ -52,27 +53,27 @@ type instance Result (IOHandler a) = IO a
 handleIO :: Comp (IOHandler a) a -> IO a
 handleIO comp = handle comp (\x _ -> return x) IOHandler 
 
-data Get (s :: [*]) (t :: [*]) where
-  Get :: Get '[s] '[]
-type instance Return (Get '[s] '[]) = s
-get :: ((h `Handles` Get) '[s]) => Comp h s
+data Get (s :: *) (t :: ()) where
+  Get :: Get s '()
+type instance Return (Get s '()) = s
+get :: ((h `Handles` Get) s) => Comp h s
 get = doOp Get
 
-data Put (s :: [*]) (t :: [*]) where
-  Put :: s -> Put '[s] '[]
-type instance Return (Put '[s] '[]) = ()
-put :: ((h `Handles` Put) '[s]) => s -> Comp h ()
+data Put (s :: *) (t :: ()) where
+  Put :: s -> Put s '()
+type instance Return (Put s '()) = ()
+put :: ((h `Handles` Put) s) => s -> Comp h ()
 put s = doOp (Put s)
 
 -- [handles| h {Get s, Put s}|]
 
-type SComp s a = ((h `Handles` Get) '[s], (h `Handles` Put) '[s]) => Comp h a
+type SComp s a = ((h `Handles` Get) s, (h `Handles` Put) s) => Comp h a
 
 newtype StateHandler (s :: *) (a :: *) = StateHandler s
 type instance Result (StateHandler s a) = a
-instance ((StateHandler s a `Handles` Get) '[s]) where
+instance ((StateHandler s a `Handles` Get) s) where
   clause Get k (StateHandler s) = k s (StateHandler s)
-instance ((StateHandler s a `Handles` Put) '[s]) where
+instance ((StateHandler s a `Handles` Put) s) where
   clause (Put s) k _ = k () (StateHandler s)
 
 countTest :: () -> SComp Int ()
