@@ -150,14 +150,14 @@ lowerId :: GenParser Char a String
 lowerId =
   do
     c <- lower
-    cs <- many alphaNum
+    cs <- many (alphaNum <|> char '\'')
     return (c : cs)
 
 upperId :: GenParser Char a String
 upperId =
   do
     c <- upper
-    cs <- many alphaNum
+    cs <- many (alphaNum <|> char '\'')
     return (c : cs)
 
 
