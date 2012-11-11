@@ -426,7 +426,7 @@ parseType :: String -> Type
 parseType s =
   toType (Exts.fromParseResult
           (Exts.parseTypeWithMode
-           (Exts.ParseMode "" [FlexibleContexts, TypeOperators] True True Nothing)
+           (Exts.ParseMode "" [MultiParamTypeClasses, FlexibleInstances, FlexibleContexts, TypeOperators] True True Nothing)
            s))
 
 parseDecs :: String -> [Dec]
