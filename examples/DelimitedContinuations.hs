@@ -1,49 +1,48 @@
 -- delimited continuations with effect handlers
 
-{-# LANGUAGE TypeFamilies, NoMonomorphismRestriction,
-             FlexibleContexts, TypeOperators #-}
+{-# LANGUAGE TypeFamilies,
+             FlexibleContexts, TypeOperators,
+             MultiParamTypeClasses,
+             OverlappingInstances, UndecidableInstances,
+             FlexibleInstances,
+             QuasiQuotes
+  #-}
 
+import DesugarHandlers
 import Handlers
 
---- shift/reset
-data Shift r a e = Shift
-instance Op (Shift r a e) where
-  type Param (Shift r a e) = (a -> r) -> Comp (Shift r a e, e) r
-  type Return (Shift r a e) = a
+[operation|forall a.Shift0 r :: ((a -> r) -> r) -> a|]
+[handler|
+  Reset0 r a :: r polyhandles {Shift0 r} where
+    Return x   -> x
+    Shift0 p k -> p k
+|]
 
-shift :: (Shift r a e `In` e') => ((a -> r) -> Comp (Shift r a e, e) r) -> Comp e' a
-shift = applyOp Shift
+[operation|forall a.Shift h r :: ((a -> r) -> Comp (Reset h r a) r) -> a|]
+[handler|
+  Reset h r a :: r polyhandles {Shift h r} where
+    Return x   -> x
+    Shift p  k -> reset (p k)
+|]
 
-shift' :: (Shift r a e `NotIn` e) =>
-          ((a -> r) -> Comp (Shift r a e, e) r) -> Comp (Shift r a e, e) a
-shift' = shift
+-- Note that reset requires recursion (both in the terms and the
+-- types), but reset0 does not.
 
-reset :: Comp (Shift r a (), ()) r -> r
-reset = resetH Empty
+-- We can define versions of reset0 and reset that forward other
+-- operations...  This is a matter of replacing each of the 'raw'
+-- instances of r in the types of Shift0 and Shift0 with Comp h r.
+[operation|forall a.Shift0F h r :: ((a -> Comp h r) -> Comp h r) -> a|]
+[handler|
+  forward h.
+    Reset0F r a :: r polyhandles {Shift0F h r} where
+      Return x    -> return x
+      Shift0F p k -> p k
+|]
 
-resetH :: (Shift r a e `NotIn` e) => OpHandler e r -> Comp (Shift r a e, e) r -> r
-resetH h c = handle c (Shift |-> (\p k -> resetH h (p k)) :<: h, id)
-
--- Note that reset requires recursion, but reset0 defined below does
--- not. Also, because the operation clause for shift wraps a handler
--- around the body, it is necessary to add an additional effect
--- parameter to Shift.
-
---- shift0/reset0
-data Shift0 r a = Shift0
-instance Op (Shift0 r a) where
-  type Param (Shift0 r a) = (a -> r) -> r
-  type Return (Shift0 r a) = a
-
-shift0 :: (Shift0 r a `In` e) => ((a -> r) -> r) -> Comp e a
-shift0 = applyOp Shift0
-
-shift0' :: (Shift0 r a `NotIn` e) => ((a -> r) -> r) -> Comp (Shift0 r a, e) a
-shift0' = shift0
-
-
-reset0 :: Comp (Shift0 r a, ()) r -> r
-reset0 = reset0H Empty
-
-reset0H :: (Shift0 r a `NotIn` e) => OpHandler e r -> Comp (Shift0 r a, e) r -> r
-reset0H h c = handle c (Shift0 |-> (\p k -> p k) :<: h, id)
+[operation|forall a.ShiftF h r :: ((a -> Comp h r) -> Comp (ResetF h r a) r) -> a|]
+[handler|
+  forward h. 
+    ResetF r a :: r polyhandles {ShiftF h r} where
+      Return x    -> return x
+      ShiftF p  k -> resetF (p k)
+|]
