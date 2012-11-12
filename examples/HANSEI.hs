@@ -1,4 +1,4 @@
-{-# LANGUAGE TypeFamilies, NoMonomorphismRestriction, RankNTypes,
+{-# LANGUAGE TypeFamilies, RankNTypes,
     MultiParamTypeClasses, FlexibleInstances, GADTs,
     OverlappingInstances, UndecidableInstances, QuasiQuotes,
     FlexibleContexts, TypeOperators, ScopedTypeVariables, ConstraintKinds #-}
@@ -74,9 +74,13 @@ reify comp = pVHandler (letLazyHandler' comp)
 --   do
 --     i <- dice (map fst l)
 --     return $ snd (l !! i)
- 
+
+
 toss :: Prob -> Q Bool
 toss p = dist [(p, True), (1-p, False)]
+
+failed :: Q Bool
+failed = dist []
 
 -- In a monadic setting we must make boolean short circuit evaluation
 -- explicit
@@ -181,7 +185,7 @@ exploreUntilHandler' comp =
   where
     (ans, susp) = exploreUntilHandler 1 Map.empty [] comp
 
-(/==) = liftM2 (/=)
+m /== n = liftM2 (/=) m n
 
 tossesXor :: Int -> Q Bool
 tossesXor n = loop n

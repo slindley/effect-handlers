@@ -8,7 +8,7 @@
 {-# LANGUAGE GADTs, TypeFamilies, NoMonomorphismRestriction, RankNTypes,
     MultiParamTypeClasses, FlexibleInstances, OverlappingInstances,
     UndecidableInstances, FlexibleContexts, TypeOperators, ScopedTypeVariables,
-    BangPatterns, QuasiQuotes
+    BangPatterns, QuasiQuotes, ConstraintKinds
   #-}
 
 import Control.Monad
@@ -45,6 +45,47 @@ getlines = loop []
         check acc "" = return (reverse acc)
         check acc l  = loop (l:acc)
 
+newtype EnStrHandler0 h a = EnStrHandler0 String
+type instance Result (EnStrHandler0 h a) = Comp h a
+instance (h `Handles` GetC) => EnStrHandler0 h a `Handles` GetC where
+  clause GetC k (EnStrHandler0 "")    = do {c <- getC; k c (EnStrHandler0 "")}
+  clause GetC k (EnStrHandler0 (c:t)) = k (Just c) (EnStrHandler0 t)
+--en_str0 :: String -> I a -> I a
+en_str0 s comp = handle comp (\x _ -> return x) (EnStrHandler0 s)
+
+[operation|Foo :: ()|]
+bar = do {x <- getC; foo; return x}
+
+-- we should allow constraints on closed handlers
+
+-- [handler|
+--   (h handles {GetC}) =>
+--     EnStrHandler0 h a :: String -> Comp h a
+--       handles {GetC} where
+--         Return x   _     -> return x
+--         GetC     k ""    -> do {c <- getC; k c ""}
+--         GetC     k (c:t) -> k (Just c) t
+-- |]
+
+-- Perhaps forwarding should be syntactic sugar for default patterns.
+--
+-- Potentially, this could support other kinds of behaviour. For
+-- instance, we could count the number of forwarded operations. We
+-- could also do things like duplicate the continuation for forwarded
+-- computations. It's not entirely clear how that would be useful. We
+-- can't inspect forward operations, as they are polymorphic.
+
+-- [handler|
+--   (h handles {GetC}) =>
+--     EnStrHandler h a :: String -> Comp h a handles {GetC} where
+--       Return x   _     -> return x
+--       GetC     k ""    -> do {c <- getC; k c ""}
+--       GetC     k (c:t) -> k (Just c) t
+--       op       k s     -> do {x <- op; k x s}
+-- |]
+
+
+
 [handler|
   forward h.(h `Handles` GetC) =>
     EnStrHandler a :: String -> a handles {GetC} where
@@ -53,7 +94,9 @@ getlines = loop []
       Return x   _     -> return x
 |]
 
-en_str :: String -> I a -> I a
+type J a = forall h c.(h `Handles` GetC, c h) => Comp h a
+
+en_str :: (h `Handles` GetC) => String -> I a -> Comp h a
 en_str s comp = enStrHandler s comp
 
 -- data EnStrHandler h a = EnStrHandler String

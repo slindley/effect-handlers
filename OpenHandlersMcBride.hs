@@ -49,7 +49,22 @@ type instance Inner (IOHandler a) = a
 handleIO :: Comp (IOHandler a) a -> IO a
 handleIO comp = handle comp (\x _ -> return x) IOHandler 
 
+-- newtype Comp h a = Comp {handle :: (a -> h -> Result h) -> h -> Result h}
 
+-- instance Monad (Comp h) where
+--   return v = Comp (\k -> k v)
+--   (>>=)  = undefined
+-- --   return v     = Comp (\f k h -> k (f v) h)
+-- --   Comp c >>= g = Comp (\f k h -> c (\x -> undefined) undefined h)
+-- --  return v     = Comp (\f k h -> k (f v) h)
+-- --  Comp c >>= g = Comp (\f k h -> c (\a -> handle (g a) f k h) undefined h) --f (\x h' -> handle (g x) f k h') h)
+
+
+-- doOp :: (h `Handles` op) => op -> Comp h (Return op)
+-- doOp op = Comp (\k h -> clause op (\x -> Comp (\k' -> k x)) h)
+--doOp op = Comp (\k h -> clause op (\x -> return (k x h)) h) -- Comp (\k' h' -> k x h')) h)
+--doOp op = Comp (\k h -> clause op (\x -> return (k x h)) h)
+--doOp op = Comp (\f k h -> clause op (\x -> return (k x h)) h)
 
 
 -- newtype Comp h a = Comp {handle :: (Inner h -> h -> Result h) -> (a -> Inner h) -> h -> Inner h}

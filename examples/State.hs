@@ -47,6 +47,13 @@ type SComp s a =
       Put     s'  k  ss s -> k () (s:ss) s'
 |]
 [handler|
+  LogState2 s a :: [s] -> (a, [s])
+    handles {Get s, Put s} where
+      Return  x      ss     -> (x, reverse ss)
+      Get         k  (s:ss) -> k s  (s:ss)
+      Put     s   k  ss     -> k () (s:ss)
+|]
+[handler|
   IORefState s a :: IORef s -> IO a
     handles {Get s, Put s} where
       Return  x     _ -> return x

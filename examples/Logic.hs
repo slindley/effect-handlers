@@ -5,12 +5,20 @@
   #-}
 
 import Control.Monad
+import Control.Applicative
 
 import Handlers
 import DesugarHandlers
 
 [operation|forall a.Failure ::        a|]
 [operation|forall a.Choose  :: [a] -> a|]
+
+infixr :-
+data SomeList a = Last a | a :- SomeList a
+  deriving Show
+
+[operation|forall a.ChooseSome :: SomeList a -> a|]
+
 
 type Logic a = (h `PolyHandles` Failure, h `PolyHandles` Choose) => Comp h a
 
@@ -28,10 +36,17 @@ allResults comp = allHandler comp
   forward h.MaybeHandler a :: Maybe a
     polyhandles {Failure, Choose} where
       Failure  k -> return Nothing
-      Choose l k -> foldM (\m a ->
-                             case m of
-                               Nothing -> k a
-                               m       -> return m) Nothing l
+      Choose xs k -> pickFirst xs
+          where
+            pickFirst []     = return Nothing
+            pickFirst (x:xs) = do r <- k x
+                                  case r of
+                                    Just _  -> return r
+                                    Nothing -> pickFirst xs
+      -- Choose l k -> foldM (\m v ->
+      --                          case m of
+      --                            Just _  -> return m
+      --                            Nothing -> k v) Nothing l
       Return x   -> return (Just x)
 |]
 maybeResults :: Logic a -> Comp h (Maybe a)
@@ -43,6 +58,8 @@ data Stack h a = Stack ([Stack h a -> Comp h a])
     polyhandles {Failure, Choose} where
       Failure       k (Stack [])     -> failure
       Failure       k (Stack (x:xs)) -> x (Stack xs)
+      Choose []     k (Stack [])     -> failure
+      Choose []     k (Stack (x:xs)) -> x (Stack xs)
       Choose (a:as) k (Stack l)      -> k a (Stack (map k as ++ l))
       Return x        _              -> return x
 |]
