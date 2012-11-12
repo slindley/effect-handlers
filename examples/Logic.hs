@@ -91,3 +91,25 @@ test1 =
     j <- choose [1..10]
     if (i+j) `mod` 2 == 0 then failure
       else return [i, j]
+
+safeAddition :: [Int] -> Int -> Int -> Bool
+safeAddition [] _ _ = True
+safeAddition (r:rows) row i =
+   row /= r &&
+   abs (row - r) /= i &&
+   safeAddition rows row (i + 1)
+
+queens :: Int -> [[Int]]
+queens n = foldM f [] [1..n] where
+    f rows _ = [row : rows |
+                row <- [1..n],
+                safeAddition rows row 1]
+
+check b = if b then return ()
+          else failure
+
+--queens :: Int -> [[Int]]
+queens' n = foldM f [] [1..n] where
+    f rows _ = do row <- choose [1..n]
+                  check (safeAddition rows row 1)
+                  return (row : rows)
