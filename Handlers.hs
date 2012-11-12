@@ -3,6 +3,7 @@
 {-# LANGUAGE TypeFamilies,
     MultiParamTypeClasses,
     TypeOperators,
+    RankNTypes,
     NoMonomorphismRestriction,
     FunctionalDependencies,
     TypeSynonymInstances,
@@ -73,7 +74,7 @@ monoDoOp op = Comp (\k h -> monoClause op k h)
 data PureHandler a = PureHandler
 type instance Result (PureHandler a) = a
 
-handlePure :: Comp (PureHandler a) a -> a
+handlePure :: (forall h.Comp h a) -> a
 handlePure comp = handle comp (\x _ -> x) PureHandler
 
 data IOHandler a = IOHandler

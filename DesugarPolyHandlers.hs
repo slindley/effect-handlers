@@ -122,13 +122,12 @@
 
 {-# LANGUAGE FlexibleContexts #-}
 
-module DesugarHandlers where
+module DesugarPolyHandlers where
 
-import ParseHandlers(parseOpDef,
-                     parseHandlerDef,
-                     parseHandlesConstraint,
-                     HandlesConstraint, HandlerDef, OpDef,
-                     QuantifierKind(..), OpKind(..))
+import ParsePolyHandlers(parseOpDef,
+                         parseHandlerDef,
+                         parseHandlesConstraint,
+                         HandlesConstraint, HandlerDef, OpDef)
 
 import Language.Haskell.TH
 import Language.Haskell.TH.Quote
@@ -138,7 +137,7 @@ import Language.Haskell.Exts.Extension (Extension(..))
 
 --import Language.Haskell.SyntaxTrees.ExtsToTH
 import qualified Language.Haskell.Meta.Parse as MetaParse
-import Language.Haskell.Meta.Syntax.Translate (toType, toDecs, toExp)
+import Language.Haskell.Meta.Syntax.Translate (toType, toDecs)
 
 import Data.List
 import Data.Char(toUpper,toLower)
@@ -177,13 +176,9 @@ handlerParser :: String -> Q [Dec]
 handlerParser s = makeHandlerDef (parseHandlerDef s)
 
 makeHandlerDef :: HandlerDef -> Q [Dec]
-makeHandlerDef (h, name, ts, sigs, r, cs) =
+makeHandlerDef (h, name, ts, sig, r, cs) =
   do 
-    let sig     = [s | (Plain, ss) <- sigs, s <- ss]
-        polySig = [s | (Poly,  ss) <- sigs, s <- ss]
-        monoSig = [s | (Mono,  ss) <- sigs, s <- ss]
-        
-        cname = mkName (let (c:cs) = name in toUpper(c) : cs)
+    let cname = mkName (let (c:cs) = name in toUpper(c) : cs)
         fname = mkName (let (c:cs) = name in toLower(c) : cs)
         
         (args, result') = splitFunType True (parseType (r ++ " -> ()"))
@@ -196,8 +191,7 @@ makeHandlerDef (h, name, ts, sigs, r, cs) =
             Nothing     -> (map mkName ts, Nothing, result')
         
         plainHandles = mkName "Handles"
-        polyHandles  = mkName "PolyHandles"
-        monoHandles  = mkName "MonoHandles"
+        
         happ = ConT cname `appType` map VarT tyvars
         
         handlerType =
@@ -228,34 +222,29 @@ makeHandlerDef (h, name, ts, sigs, r, cs) =
             retCases -> retCases
         
         
-        clauseInstance :: OpKind -> (String, [String]) -> Q Dec
-        clauseInstance opKind (opName, tvs) =
+        clauseInstance :: (String, [String]) -> Q Dec
+        clauseInstance (opName, tvs) =
           do
+            let makeArgType []  = PromotedT (mkName "GHC.Tuple.()")
+                makeArgType [x] = VarT x
+                makeArgType xs  = PromotedTupleT n `appType` map VarT xs
+                  where
+                    n = length xs
+            
             let ctx =
                   case constraint of
                     Nothing -> []
                     Just s | ForallT [] ctx _ <- parseType (s ++ " => ()") -> ctx
         
-                opType tvs = ConT (mkName opName) `appType` map (VarT . mkName) tvs
+                opArgTypes = makeArgType (map mkName tvs)
                 handles =
-                  case opKind of
-                    Plain -> ConT plainHandles `appType` [happ, opType tvs]
-                    Poly  -> ConT polyHandles  `appType` [happ, opType tvs]
-                    Mono  -> ConT monoHandles  `appType` [happ, opType (init tvs), extra] 
-                      where
-                        extra = VarT (mkName (last tvs))
+                  ConT (mkName "Handles") `appType` [happ, ConT (mkName opName), opArgTypes]
                 
-                clauseName =
-                  case opKind of
-                    Plain -> "clause" 
-                    Poly  -> "polyClause"
-                    Mono  -> "monoClause"
-            
                 makeClauseDecs :: [Match] -> Q [Dec]
                 makeClauseDecs cases =
                   do
                     clauses <- mapM makeClause cases
-                    return [FunD (mkName clauseName) clauses]
+                    return [FunD (mkName "clause") clauses]
             
                 makeClause :: Match -> Q Clause
                 makeClause (Match pat body wdecs) =
@@ -299,9 +288,7 @@ makeHandlerDef (h, name, ts, sigs, r, cs) =
               pre = [ClassP handles ([VarT (head tyvars), op] ++ extra)]
         
         ds = parseDecs cs
-    opClauses   <- mapM (clauseInstance Plain) sig
-    polyClauses <- mapM (clauseInstance Poly) polySig
-    monoClauses <- mapM (clauseInstance Mono) monoSig
+    opClauses   <- mapM clauseInstance sig
 
       -- It's tempting to try to give handler functions signatures that abstract away
       -- from the handler type. But this doesn't appear to be feasible, as the
@@ -352,16 +339,12 @@ makeHandlerDef (h, name, ts, sigs, r, cs) =
             Just _  ->
               do
                 let plain = parseDecs "clause     op k h = doOp op     >>= (\\x -> k x h)"
-                    poly  = parseDecs "polyClause op k h = polyDoOp op >>= (\\x -> k x h)"
-                    mono  = parseDecs "monoClause op k h = monoDoOp op >>= (\\x -> k x h)"
                 optype <- newName "optype"
                 return
-                  ([forwardInstance plainHandles []            plain,
-                    forwardInstance polyHandles  []            poly,
-                    forwardInstance monoHandles  [VarT optype] mono])
+                  [forwardInstance plainHandles []            plain]
     
     return ([handlerType, resultInstance] ++
-            opClauses ++ polyClauses ++ monoClauses ++ forwardClauses ++
+            opClauses ++ forwardClauses ++
             [handlerFun])
 
 
@@ -374,49 +357,42 @@ opParser :: String -> Q [Dec]
 opParser s = makeOpDefs (parseOpDef s)
 
 makeOpDefs :: OpDef -> Q [Dec]
-makeOpDefs (poly, name, ts, sig) =
+makeOpDefs (us, name, ts, sig) =
   do
     let (args, result) = splitFunType True (parseType (sig ++ " -> ()"))
-    let f = parseType sig
+        f = parseType sig
 
-    let cname = mkName (let (c:cs) = name in toUpper(c) : cs)
-    let fname = mkName (let (c:cs) = name in toLower(c) : cs)
-      
-    let (lift, tyvars) =
-          case poly of
-            Just (Forall, a) ->
-              (mkName "polyDoOp", map mkName ts ++ [mkName a])
-            Just (Exists, a) ->
-              (mkName "monoDoOp", map mkName ts ++ [mkName a])
-            Nothing ->
-              (mkName "doOp", map mkName ts)
-    let opType =
-          case args of
-            [_] ->
-                NewtypeD [] cname
-                    (map PlainTV tyvars)
-                    (NormalC cname (map (\arg -> (NotStrict, arg)) args))
-                    []
-            _ ->
-                DataD [] cname
-                    (map PlainTV tyvars)
-                    [NormalC cname (map (\arg -> (NotStrict, arg)) args)]
-                    []
-    let returnInstance =
+        cname = mkName (let (c:cs) = name in toUpper(c) : cs)
+        fname = mkName (let (c:cs) = name in toLower(c) : cs)
+       
+        lift = mkName "doOp"
+       
+        forallVars = map mkName us
+        existsVars = map mkName ts
+        
+        tyvars = forallVars ++ existsVars
+    evar <- newName "s"
+    uvar <- newName "t"
+    let kindAndType []  = (TupleT 0, PromotedT (mkName "GHC.Tuple.()"))
+        kindAndType [x] = (StarT, VarT x)
+        kindAndType xs  = (TupleT n `appType` map (const StarT) xs,
+                           PromotedTupleT n `appType` map VarT xs)
+          where
+            n = length xs
+        (ekind, eimp) = kindAndType existsVars
+        (ukind, uimp) = kindAndType forallVars
+    
+        opType =          
+          DataD [] cname
+            [KindedTV evar ekind, KindedTV uvar ukind]
+            [ForallC [] [EqualP (VarT evar) eimp, EqualP (VarT uvar) uimp]
+             (NormalC cname (map (\arg -> (NotStrict, arg)) args))]
+            []
+        returnInstance =
           TySynInstD (mkName "Return")
-          [appType (ConT cname) (map VarT tyvars)] result
+          [appType (ConT cname) [eimp, uimp]] result
     xs <- mapM (\_ -> newName "x") args
-    let (handles, happ) =
-          case poly of
-            Just (Forall, _) ->
-              (ClassP (mkName "PolyHandles"),
-               ConT cname `appType` map VarT (init tyvars))
-            Just (Exists, _) ->
-              (\xs -> ClassP (mkName "MonoHandles") (xs ++ [VarT (last tyvars)]),
-               ConT cname `appType` map VarT (init tyvars))
-            Nothing          ->
-              (ClassP (mkName "Handles"),
-               ConT cname `appType` map VarT tyvars)
+    
     opFunSig <-
       do
         h <- newName "handler"
@@ -425,7 +401,7 @@ makeOpDefs (poly, name, ts, sig) =
         return (SigD fname
                 (ForallT
                  (PlainTV h:map PlainTV tyvars)
-                 [handles [VarT h, happ]]
+                 [ClassP (mkName "Handles") [VarT h, ConT cname, eimp]]
                  (makeFunType h args)))
           
     let opFun = FunD fname
@@ -471,9 +447,6 @@ parseDecs s =
              MultiParamTypeClasses, FlexibleInstances, FlexibleContexts,
              TypeOperators] True True Nothing)
            s))
-
--- parseDecs :: String -> [Dec]
--- parseDecs s | Right ds <- MetaParse.parseDecs s = ds
 
 parseExp :: String -> Exp
 parseExp s | Right e <- MetaParse.parseExp s = e

@@ -16,7 +16,8 @@
 
 module PolyHandlers where
 
-import DesugarHandlers
+import DesugarPolyHandlers
+import GHC.Tuple
 
 type family Return (opApp :: *) :: *
 type family Result (h :: *) :: *
@@ -55,17 +56,19 @@ type instance Result (IOHandler a) = IO a
 handleIO :: Comp (IOHandler a) a -> IO a
 handleIO comp = handle comp (\x _ -> return x) IOHandler 
 
-data Get (s :: *) (t :: ()) where
-  Get :: Get s '()
-type instance Return (Get s '()) = s
-get :: ((h `Handles` Get) s) => Comp h s
-get = doOp Get
+[operation|Get s :: s|]
+-- data Get (s :: *) (t :: ()) where
+--   Get :: Get s '()
+-- type instance Return (Get s '()) = s
+-- get :: ((h `Handles` Get) s) => Comp h s
+-- get = doOp Get
 
-data Put (s :: *) (t :: ()) where
-  Put :: s -> Put s '()
-type instance Return (Put s '()) = ()
-put :: ((h `Handles` Put) s) => s -> Comp h ()
-put s = doOp (Put s)
+[operation|Put s :: s -> ()|]
+-- data Put (s :: *) (t :: ()) where
+--   Put :: s -> Put s '()
+-- type instance Return (Put s '()) = ()
+--put :: ((h `Handles` Put) s) => s -> Comp h ()
+--put s = doOp (Put s)
 
 -- [handles| h {Get s, Put s}|]
 
@@ -79,12 +82,18 @@ type SComp s a = ([handles|h {Get s}|], [handles|h {Put s}|]) => Comp h a
 
 -- type SComp s a = ([handles|h {Get s, Put s}|]) => Comp h a
 
-newtype StateHandler (s :: *) (a :: *) = StateHandler s
-type instance Result (StateHandler s a) = a
-instance ((StateHandler s a `Handles` Get) s) where
-  clause Get k (StateHandler s) = k s (StateHandler s)
-instance ((StateHandler s a `Handles` Put) s) where
-  clause (Put s) k _ = k () (StateHandler s)
+[handler|
+  StateHandler s a :: s -> a handles {Get s, Put s} where
+    Return x   _ -> x
+    Get      k s -> k s s
+    Put s    k _ -> k () s 
+|]
+-- newtype StateHandler (s :: *) (a :: *) = StateHandler s
+-- type instance Result (StateHandler s a) = a
+-- instance ((StateHandler s a `Handles` Get) s) where
+--   clause Get k (StateHandler s) = k s (StateHandler s)
+-- instance ((StateHandler s a `Handles` Put) s) where
+--   clause (Put s) k _ = k () (StateHandler s)
 
 countTest :: () -> SComp Int ()
 countTest () =
