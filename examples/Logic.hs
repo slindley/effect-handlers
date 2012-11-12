@@ -7,8 +7,9 @@
 import Control.Monad
 import Control.Applicative
 
-import Handlers
-import DesugarHandlers
+import PolyHandlers
+import DesugarPolyHandlers
+
 
 [operation|forall a.Failure ::        a|]
 [operation|forall a.Choose  :: [a] -> a|]
@@ -20,11 +21,11 @@ data SomeList a = Last a | a :- SomeList a
 [operation|forall a.ChooseSome :: SomeList a -> a|]
 
 
-type Logic a = (h `PolyHandles` Failure, h `PolyHandles` Choose) => Comp h a
+type Logic a = ((h `Handles` Failure) (), (h `Handles` Choose) ()) => Comp h a
 
 [handler|
   forward h.AllHandler a :: [a]
-    polyhandles {Failure, Choose} where
+    handles {Failure, Choose} where
       Failure     k -> return []
       Choose l k -> do {xss <- mapM k l; return (join xss)}
       Return x   -> return [x]
@@ -34,7 +35,7 @@ allResults comp = allHandler comp
 
 [handler|
   forward h.MaybeHandler a :: Maybe a
-    polyhandles {Failure, Choose} where
+    handles {Failure, Choose} where
       Failure  k -> return Nothing
       Choose xs k -> pickFirst xs
           where
@@ -54,8 +55,8 @@ maybeResults comp = maybeHandler comp
 
 data Stack h a = Stack ([Stack h a -> Comp h a])
 [handler|
-  forward h.(h `PolyHandles` Failure) => FirstHandler a :: Stack h a -> a
-    polyhandles {Failure, Choose} where
+  forward h.(Handles h Failure Unit) => FirstHandler a :: Stack h a -> a
+    handles {Failure, Choose} where
       Failure       k (Stack [])     -> failure
       Failure       k (Stack (x:xs)) -> x (Stack xs)
       Choose []     k (Stack [])     -> failure
@@ -63,12 +64,12 @@ data Stack h a = Stack ([Stack h a -> Comp h a])
       Choose (a:as) k (Stack l)      -> k a (Stack (map k as ++ l))
       Return x        _              -> return x
 |]
-firstResult :: (h `PolyHandles` Failure) => Logic a -> Comp h a
+firstResult :: ((h `Handles` Failure) ()) => Logic a -> Comp h a
 firstResult comp = firstHandler (Stack []) comp
 
 [handler|
   IterativeHandler a :: Int -> (Bool, [a])
-    polyhandles {Failure, Choose} where
+    handles {Failure, Choose} where
       Failure  k i -> (False, [])
       Choose l k i -> if i == 0 then (True, [])
                       else

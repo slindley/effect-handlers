@@ -1,33 +1,33 @@
 {-# LANGUAGE TypeFamilies, NoMonomorphismRestriction, RankNTypes,
     MultiParamTypeClasses, FlexibleInstances, OverlappingInstances,
     FlexibleContexts, TypeOperators, UndecidableInstances,
-    QuasiQuotes
+    QuasiQuotes, ScopedTypeVariables
   #-}
 
 import Control.Monad
 
-import Handlers
-import DesugarHandlers
+import PolyHandlers
+import DesugarPolyHandlers
 
-[operation|exists s.Await :: s|]
-[operation|exists s.Yield :: s -> ()|]
+[operation|Await s :: s|]
+[operation|Yield s :: s -> ()|]
 
-type Pipe i o h a   = ((h `MonoHandles` Await) i, (h `MonoHandles` Yield) o) => Comp h a
-type Consumer i h a = (h `MonoHandles` Await) i => Comp h a
-type Producer o h a = (h `MonoHandles` Yield) o => Comp h a
+type Pipe i o h a   = ((h `Handles` Await) i, (h `Handles` Yield) o) => Comp h a
+type Consumer i h a = (h `Handles` Await) i => Comp h a
+type Producer o h a = (h `Handles` Yield) o => Comp h a
 
 data Prod s r = Prod (() -> Cons s r -> r)
 data Cons s r = Cons (s  -> Prod s r -> r)
 
 [handler|
   forward h.Down s a :: Prod s (Comp h a) -> a
-    monohandles {Await s} where
+    handles {Await s} where
       Await    k (Prod prod) -> prod () (Cons k)
       Return x   _           -> return x
 |]
 [handler|
   forward h.Up s a :: Cons s (Comp h a) -> a
-    monohandles {Yield s} where
+    handles {Yield s} where
       Yield s  k (Cons cons) -> cons s (Prod k)
       Return x   _           -> return x
 |]
@@ -40,7 +40,7 @@ d <+< u = down (Prod (\() cons -> up cons u)) d
 fromList :: [a] -> Producer a h ()
 fromList = mapM_ yield
 
-take' :: (h `Handles` PutString) => Int -> Pipe a a h ()
+take' :: ((h `Handles` PutString) ()) => Int -> Pipe a a h ()
 take' n =
   do
     replicateM_ n $ do
@@ -49,19 +49,19 @@ take' n =
     putString "You shall not pass!"
 
 [operation|PutString :: String -> ()|]
-instance IOHandler a `Handles` PutString where
+instance (IOHandler a `Handles` PutString) () where
   clause (PutString s) k h =
     do
       putStrLn s
       k () h
 
-printer :: (h `Handles` PutString) => Consumer Int h r
+printer :: (h `Handles` PutString) () => Consumer Int h r
 printer =
   forever $ do
     x <- await
     putString (show x)
 
-pipeline :: (h `Handles` PutString) => Comp h ()
+pipeline :: (h `Handles` PutString) () => Comp h ()
 pipeline = printer <+< take' 3 <+< fromList [(1::Int)..]
 
 produceFrom :: Int -> Producer Int h a

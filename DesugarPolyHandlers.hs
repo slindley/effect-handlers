@@ -159,7 +159,7 @@ makeHandlesConstraint (h, sig) =
               handles `appType` [handler, ConT (mkName op), t]
                   where
                     t = case args of
-                          []    -> PromotedT (mkName "GHC.Tuple.()")
+                          []    -> TupleT 0
                           [arg] -> VarT (mkName arg)
                           _     -> typeList args
                     typeList args =
@@ -196,7 +196,7 @@ makeHandlerDef (h, name, ts, sig, r, cs) =
         
         handlerType =
           DataD [] cname
-                    (map PlainTV tyvars)
+                    (map (\tv -> KindedTV tv StarT) tyvars)
                     [NormalC cname (map (\arg -> (NotStrict, arg)) args)]
                     []
         resultInstance =
@@ -220,17 +220,16 @@ makeHandlerDef (h, name, ts, sig, r, cs) =
           case filter (matchOp (== "Return")) cases of
             []       -> error "No return clause"
             retCases -> retCases
-        
+                
+        makeArgType []  = TupleT 0
+        makeArgType [x] = VarT x
+        makeArgType xs  = PromotedTupleT n `appType` map VarT xs
+          where
+            n = length xs
         
         clauseInstance :: (String, [String]) -> Q Dec
         clauseInstance (opName, tvs) =
           do
-            let makeArgType []  = PromotedT (mkName "GHC.Tuple.()")
-                makeArgType [x] = VarT x
-                makeArgType xs  = PromotedTupleT n `appType` map VarT xs
-                  where
-                    n = length xs
-            
             let ctx =
                   case constraint of
                     Nothing -> []
@@ -341,7 +340,7 @@ makeHandlerDef (h, name, ts, sig, r, cs) =
                 let plain = parseDecs "clause     op k h = doOp op     >>= (\\x -> k x h)"
                 optype <- newName "optype"
                 return
-                  [forwardInstance plainHandles []            plain]
+                  [forwardInstance plainHandles [VarT optype] plain]
     
     return ([handlerType, resultInstance] ++
             opClauses ++ forwardClauses ++
@@ -373,7 +372,7 @@ makeOpDefs (us, name, ts, sig) =
         tyvars = forallVars ++ existsVars
     evar <- newName "s"
     uvar <- newName "t"
-    let kindAndType []  = (TupleT 0, PromotedT (mkName "GHC.Tuple.()"))
+    let kindAndType []  = (StarT, TupleT 0)
         kindAndType [x] = (StarT, VarT x)
         kindAndType xs  = (TupleT n `appType` map (const StarT) xs,
                            PromotedTupleT n `appType` map VarT xs)
@@ -385,8 +384,8 @@ makeOpDefs (us, name, ts, sig) =
         opType =          
           DataD [] cname
             [KindedTV evar ekind, KindedTV uvar ukind]
-            [ForallC [] [EqualP (VarT evar) eimp, EqualP (VarT uvar) uimp]
-             (NormalC cname (map (\arg -> (NotStrict, arg)) args))]
+            [ForallC (map PlainTV tyvars) [EqualP (VarT evar) eimp, EqualP (VarT uvar) uimp]
+             (NormalC cname (map (\arg -> (NotStrict, arg)) args))]            
             []
         returnInstance =
           TySynInstD (mkName "Return")
