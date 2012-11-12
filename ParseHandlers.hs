@@ -13,6 +13,24 @@ import ParseCode
 data OpKind = Plain | Poly | Mono
   deriving Show
 
+{- Handles constraints -}
+
+type HandlesConstraint = (String, [(String, [String])])
+
+parseHandlesConstraint :: String -> HandlesConstraint
+parseHandlesConstraint s =
+    case parse handlesconstraint "" s of
+      Right r -> r
+
+handlesconstraint :: GenParser Char a HandlesConstraint
+handlesconstraint =
+    do
+      spaces
+      h <- lowerId
+      spaces
+      sig <- opSigs
+      return (h, sig)
+
 {- Handler definitions -}
 type HandlerDef = (Maybe (String, Maybe String),
                    String,
@@ -21,6 +39,20 @@ type HandlerDef = (Maybe (String, Maybe String),
                    String,
                    String)
 
+parseHandlerDef :: String -> HandlerDef
+parseHandlerDef s =
+    case parse handlerdef "" s of
+      Right r -> r
+
+
+opSigs :: GenParser Char a [(String, [String])]
+opSigs = 
+    do
+      char '{'
+      sig <- opSig `sepBy1` char ','
+      char '}'
+      return sig
+
 handlerSig :: String -> OpKind -> GenParser Char a (OpKind, [(String, [String])])
 handlerSig s k =
     do
@@ -28,9 +60,7 @@ handlerSig s k =
           (do
             string s
             spaces
-            char '{'
-            sig <- opSig `sepBy1` char ','
-            char '}'
+            sig <- opSigs
             spaces
             return sig)
       return (k, sig)
@@ -43,13 +73,6 @@ opSig =
       spaces
       ts <- tyVars
       return (name, ts)
-      
-
-parseHandlerDef :: String -> HandlerDef
-parseHandlerDef s =
-    case parse handlerdef "" s of
-      Right r -> r
-
 
 handlerdef :: GenParser Char a HandlerDef
 handlerdef =

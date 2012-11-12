@@ -124,7 +124,11 @@
 
 module DesugarHandlers where
 
-import ParseHandlers(parseOpDef, parseHandlerDef, HandlerDef, OpDef, QuantifierKind(..), OpKind(..))
+import ParseHandlers(parseOpDef,
+                     parseHandlerDef,
+                     parseHandlesConstraint,
+                     HandlesConstraint, HandlerDef, OpDef,
+                     QuantifierKind(..), OpKind(..))
 
 import Language.Haskell.TH
 import Language.Haskell.TH.Quote
@@ -138,6 +142,32 @@ import Language.Haskell.Meta.Syntax.Translate (toType)
 
 import Data.List
 import Data.Char(toUpper,toLower)
+
+
+{- Handles constraints -}
+handles = QuasiQuoter { quoteExp = undefined, quotePat = undefined,
+                        quoteType = handlesParser, quoteDec = undefined}
+
+handlesParser :: String -> Q Type
+handlesParser s = makeHandlesConstraint (parseHandlesConstraint s)
+
+makeHandlesConstraint :: HandlesConstraint -> Q Type
+makeHandlesConstraint (h, sig) =
+    do
+      let handler = VarT (mkName h)
+      let handles = ConT (mkName "Handles")
+      let constraint (op, args) =
+              handles `appType` [handler, ConT (mkName op), t]
+                  where
+                    t = case args of
+                          []    -> PromotedT (mkName "GHC.Tuple.()")
+                          [arg] -> VarT (mkName arg)
+                          _     -> typeList args
+                    typeList args =
+                        t `appType` (ts ++ [PromotedNilT])
+                        where (t:ts) = map (\arg -> AppT PromotedConsT (VarT (mkName arg))) args
+      return (TupleT (length sig) `appType` map constraint sig)
+
 
 {- Handler definitions -}
 handler = QuasiQuoter { quoteExp = undefined, quotePat = undefined,

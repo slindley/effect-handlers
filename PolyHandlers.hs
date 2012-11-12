@@ -16,6 +16,8 @@
 
 module PolyHandlers where
 
+import DesugarHandlers
+
 type family Return (opApp :: *) :: *
 type family Result (h :: *) :: *
 class ((h :: *) `Handles` (op :: j -> k -> *)) (e :: j) | h op -> e where
@@ -67,7 +69,15 @@ put s = doOp (Put s)
 
 -- [handles| h {Get s, Put s}|]
 
-type SComp s a = ((h `Handles` Get) s, (h `Handles` Put) s) => Comp h a
+--type SComp s a = ((h `Handles` Get) s, (h `Handles` Put) s) => Comp h a
+--type SComp s a = (Handles h Get s, Handles h Put s) => Comp h a
+type SComp s a = ([handles|h {Get s}|], [handles|h {Put s}|]) => Comp h a
+
+-- unfortunately this doesn't work...  We have a choice of parsing a
+-- type or a declaration. A single constraint is a type,
+-- but a collection of constraints is a predicate.
+
+-- type SComp s a = ([handles|h {Get s, Put s}|]) => Comp h a
 
 newtype StateHandler (s :: *) (a :: *) = StateHandler s
 type instance Result (StateHandler s a) = a
