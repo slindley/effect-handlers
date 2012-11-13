@@ -1,4 +1,4 @@
-{- Handlers using a free monad and the codensity monad -}
+{- Handlers using a free monad -}
 
 {-# LANGUAGE TypeFamilies,
     MultiParamTypeClasses,
@@ -13,31 +13,28 @@
     PolyKinds
   #-}
 
-module CodensityHandlers where
+module FreeHandlers where
 
 type family Return (opApp :: *) :: *
 type family Result (h :: *) :: *
 class ((h :: *) `Handles` (op :: j -> k -> *)) (e :: j) | h op -> e where
   clause :: op e u -> (Return (op e u) -> h -> Result h) -> h -> Result h
 
-newtype Comp h a = Comp {unComp :: forall r . (a -> RawComp h r) -> RawComp h r}
-data RawComp h a where
-  Ret :: a -> RawComp h a
-  Do  :: (h `Handles` op) e => op e u -> (Return (op e u) -> RawComp h a) -> RawComp h a
-instance Monad (RawComp h) where
+data Comp h a where
+  Ret :: a -> Comp h a
+  Do  :: (h `Handles` op) e => op e u -> (Return (op e u) -> Comp h a) -> Comp h a
+instance Monad (Comp h) where
   return        = Ret
   Ret v   >>= f = f v
   Do op k >>= f = Do op (\x -> k x >>= f)
 
 doOp :: (h `Handles` op) e => op e u -> Comp h (Return (op e u))
-doOp op = Comp (\k -> Do op k)
+doOp op = Do op return
 
 handle :: Comp h a -> (a -> h -> Result h) -> h -> Result h
-handle (Comp c) = handle' (c return)
-  where
-    handle' :: RawComp h a -> (a -> h -> Result h) -> h -> Result h
-    handle' (Ret v) r h = r v h
-    handle' (Do op k) r h = clause op (\v h' -> handle' (k v) r h') h
+handle (Ret v) r h   = r v h
+handle (Do op k) r h = clause op (\v h' -> handle (k v) r h') h
+
 
 -- pure handlers
 data PureHandler a = PureHandler
