@@ -6,8 +6,8 @@
 
 import Control.Monad
 
-import PolyHandlers
-import DesugarPolyHandlers
+import Handlers
+import DesugarHandlers
 
 [operation|Await s :: s|]
 [operation|Yield s :: s -> ()|]
