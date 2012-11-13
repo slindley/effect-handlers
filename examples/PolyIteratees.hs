@@ -26,10 +26,10 @@ type LChar = Maybe Char
 -- getC :: ((h `Handles` GetC) ()) => Comp h LChar
 -- getC = doOp GetC
 
-type I a = forall h.((h `Handles` GetC) ()) => Comp h a
+type I a = forall h.[handles|h {GetC}|] => Comp h a
 
 [handler|
-  forward h.(Handles h GetC Unit) => EnStrHandler a :: String -> a
+  forward h handles {GetC}.EnStrHandler a :: String -> a
     handles {GetC} where
       Return x   _     -> return x
       GetC     k ""    -> do {c <- getC; k c ""}

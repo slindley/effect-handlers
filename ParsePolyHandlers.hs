@@ -18,7 +18,7 @@ data QuantifierKind = Forall | Exists
   deriving Show
 type OpDef = ([String], String, [String], String)
 
-type HandlerDef = (Maybe (String, Maybe String),
+type HandlerDef = (Maybe (String, [(String, [String])], Maybe String),
                    String,
                    [String],
                    [(String, [String])],
@@ -102,11 +102,13 @@ forward =
       spaces
       h <- lowerId
       spaces
+      sig <- option [] handlerSig 
       char '.'
       spaces
       c <- optionMaybe handlerConstraint
-      return (h, c)
+      return (h, sig, c)
 
+handlerConstraint :: GenParser Char a String
 handlerConstraint =
   do
     c <- paren
@@ -119,8 +121,6 @@ isSpaceNoNewline = satisfy (\c -> isSpace c && c /= '\n' && c /= '\r')
 
 result = manyTill anyChar (try (lookAhead
                                 (do {many1 space; string "handles" <|>
-                                                  string "polyhandles" <|>
-                                                  string "monohandles" <|>
                                                   string "where"})))
 --result = manyTill anyChar (try (do {spaces; string "where"; many isSpaceNoNewline; many newline}))
 clauses = many anyChar

@@ -4,8 +4,6 @@
     don't match up with any of the declared operations are just
     ignored).
 
-  * Sugar for handler extension?
-
   * McBride handlers?
 
   * Closure conversion? Perhaps not feasible using Template Haskell.
@@ -20,12 +18,14 @@
 
   These elaborate to:
 
-    data Get s = Get
+    data Get (e :: *) (u :: *) where
+      Get :: Get s ()
     type instance Return (Get s) = s
-    get :: forall h s.(h `Handles` Get) => Comp h s
+    get :: forall h s.(h `Handles` Get) () => Comp h s
     get = doOp Get
 
-    newtype Put s = Put s
+    data Put (e :: *) (u :: *) where
+      Put :: s -> Put s ()
     type instance Return (Put s) = ()
     put :: forall h s :: (h `Handles` Put) => s -> Comp h ()
     put s = doOp (Put s)
@@ -34,9 +34,9 @@
 
     [handler|
       StateHandler s a :: s -> a handles {Get s, Put s} where
+        Return x   _ -> x
         Get      k s -> k s s
         Put s    k _ -> k () s
-        Return x   _ -> x
     |]
 
   This elaborates to:
@@ -57,9 +57,9 @@
 
     [handler|
       forward h.FStateHandler s a :: s -> a handles {Get s, Put s} where
+        Return x   _ -> return x
         Get      k s -> k s s
         Put s    k _ -> k () s
-        Return x   _ -> return x
     |]
 
   This prepends h to the list of FStateHandler's type variables yielding:
@@ -76,12 +76,10 @@
           k v s = k' v (FStateHandler s)
     fStateHandler s comp = handle comp (\x _ -> return x) (FStateHandler s)
 
-  and additionally generates the following forwarding instances:
+  and additionally generates the following forwarding instance:
 
-    instance (h `Handles` op) => (PVHandler h a `Handles` op) where
+    instance (h `Handles` op) s => (PVHandler h a `Handles` op) s where
       clause op k h = doOp op >>= (\x -> k x h)
-    instance (h `PolyHandles` op) => (PVHandler h a `PolyHandles` op) where
-      polyClause op k h = polyDoOp op >>= (\x -> k x h)
 
   A polymorphic operation:
 
@@ -89,31 +87,30 @@
 
   This elaborates to:
 
-    data Failure a = Failure
+    data Failure (e :: *) (u :: *) where
+      Failure :: Failure () a
     type instance Return (Failure a) = a
-    failure :: forall h a.(h `Handles` Failure a) => Comp h a
-    failure = doPolyOp Failure
+    failure :: forall h a.(h `Handles` Failure) => Comp h a
+    failure = doOp Failure
 
   A handler for a polymorphic operation:
 
     [handler|
-       MaybeHandler a :: Maybe a polyhandles {Failure} where
-         Failure  k -> Nothing
+       MaybeHandler a :: Maybe a handles {Failure} where
          Return x   -> Just x
+         Failure  k -> Nothing
     |]
 
   This elaborates to
 
     newtype MaybeHandler a = MaybeHandler
     type instance Result (MaybeHandler a) = a
-    instance (MaybeHandler a `PolyHandles` Failure) where
-      polyClause Failure k = Nothing
+    instance (MaybeHandler a `Handles` Failure) where
+      clause Failure k = Nothing
     maybeHandler comp = handle comp (\x _ -> Just) MaybeHandler
 
-  The collection of operations in the curly braces includes only those
-  operations whoses clauses are defined up-front. Further clauses can
-  be added later using explicit instances of the Handles type
-  class.
+  The collection of operations in the curly braces must appear in the
+  operation clauses.
 
   Any clauses that reference operations not declared in curly braces
   are currently ignored.
@@ -182,13 +179,13 @@ makeHandlerDef (h, name, ts, sig, r, cs) =
         fname = mkName (let (c:cs) = name in toLower(c) : cs)
         
         (args, result') = splitFunType True (parseType (r ++ " -> ()"))
-        (tyvars, constraint, result) =
+        (tyvars, parentSig, constraint, result) =
           case h of
-            Just (h, c) -> ([h'] ++ map mkName ts, c, result)
+            Just (h, p, c) -> ([h'] ++ map mkName ts, p, c, result)
               where
                 h' = mkName h
                 result = appType (ConT (mkName "Comp")) [VarT h', result']
-            Nothing     -> (map mkName ts, Nothing, result')
+            Nothing     -> (map mkName ts, [], Nothing, result')
         
         plainHandles = mkName "Handles"
         
@@ -227,17 +224,28 @@ makeHandlerDef (h, name, ts, sig, r, cs) =
           where
             n = length xs
         
+        makeParentPredicate (opName, tvs) =
+            let opArgTypes = makeArgType (map mkName tvs) in
+            ClassP plainHandles [VarT (head tyvars),
+                                 ConT (mkName opName),
+                                 opArgTypes]
+
+        -- type class constraints representing operations handled
+        -- by the parent handler
+        parentCtx = map makeParentPredicate parentSig
+
+        -- raw type class constraints
+        rawCtx =
+            case constraint of
+              Nothing -> []
+              Just s | ForallT [] rawCtx _ <- parseType (s ++ " => ()") -> rawCtx
+
         clauseInstance :: (String, [String]) -> Q Dec
         clauseInstance (opName, tvs) =
-          do
-            let ctx =
-                  case constraint of
-                    Nothing -> []
-                    Just s | ForallT [] ctx _ <- parseType (s ++ " => ()") -> ctx
-        
-                opArgTypes = makeArgType (map mkName tvs)
+          do      
+            let opArgTypes = makeArgType (map mkName tvs)
                 handles =
-                  ConT (mkName "Handles") `appType` [happ, ConT (mkName opName), opArgTypes]
+                  ConT plainHandles `appType` [happ, ConT (mkName opName), opArgTypes]
                 
                 makeClauseDecs :: [Match] -> Q [Dec]
                 makeClauseDecs cases =
@@ -261,7 +269,6 @@ makeHandlerDef (h, name, ts, sig, r, cs) =
                                   []]) : wdecs
                     return (Clause ps body wdecs')
         
-                  
                 split :: [Pat] -> ([Pat], Pat, [Pat])
                 split ps = (opArgs, k, handlerArgs)
                   where
@@ -269,7 +276,7 @@ makeHandlerDef (h, name, ts, sig, r, cs) =
                     opArgs          = reverse (drop (length args + 1) (reverse ps))
             
             decs <- makeClauseDecs (filter (matchOp (== opName)) opCases)          
-            return (InstanceD ctx handles decs)
+            return (InstanceD (parentCtx ++ rawCtx) handles decs)
             
         retDec = FunD (mkName "ret") (map makeClause retCases)
           where

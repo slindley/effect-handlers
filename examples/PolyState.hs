@@ -66,7 +66,7 @@ forwardState' :: s -> SComp' (ForwardState h s a) s a -> Comp h a
 forwardState' s c = forwardState s c
 [operation|LogPut s :: s -> ()|]
 [handler|
-  forward h.((h `Handles` Get) s, Handles h Put s, Handles h LogPut s) =>
+  forward h handles {Get s, Put s, LogPut s}.
     PutLogger s a :: a
       handles {Put s} where
         Return  x     -> return x
@@ -80,7 +80,7 @@ forwardState' s c = forwardState s c
         LogPut s k -> do {(x, ss) <- k (); return (x, s:ss)}
 |]
 [handler|
-  forward h.(Handles h PrintLine Unit, Show s) =>
+  forward h handles {PrintLine}.(Show s) =>
     LogPutPrinter s a :: a
       handles {LogPut s} where
         Return x   -> return x
