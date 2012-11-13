@@ -9,7 +9,8 @@
     TypeSynonymInstances,
     FlexibleInstances,
     FlexibleContexts,
-    ScopedTypeVariables
+    ScopedTypeVariables,
+    PolyKinds
   #-}
 
 module PolyHandlers where
