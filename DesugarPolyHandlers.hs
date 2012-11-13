@@ -289,31 +289,13 @@ makeHandlerDef (h, name, ts, sig, r, cs) =
         ds = parseDecs cs
     opClauses   <- mapM clauseInstance sig
 
-      -- It's tempting to try to give handler functions signatures that abstract away
-      -- from the handler type. But this doesn't appear to be feasible, as the
-      -- explicit handler type seems essential for working around the limitations of
-      -- the GHC type system.
-      --
-      -- In particular there seems to be no other way of encoding
-      -- subtraction of operations by a handler.
-      -- 
-      -- handlerFunSig =
-      --   SigD fname
-      --   (ForallT
-      --    (map PlainTV tyvars)
-      --    []
-      --    (makeFunType (AppT (AppT ArrowT compType) result) args))
-      --   where
-      --     cs = map (opConstraint False) sig ++ map (opConstraint True) polySig
-      --     compType = ForallT [PlainTV h] cs (ConT (mkName "Comp") `appType` [VarT h, result])
-      --     opConstraint poly (opName, tvs) = ClassP handles [VarT h, op]
-      --       where
-      --         op = ConT (mkName opName) `appType` map (VarT . mkName) tvs
-      --         handles = if poly then polyHandles else monoHandles
-      --     h = mkName "handler" -- HACK: hopefully "handler" is fresh
-      --
-      -- makeFunType result [] = result
-      -- makeFunType result (t:ts) = AppT (AppT ArrowT t) (makeFunType result ts)
+    -- It's tempting to try to give handler functions signatures that abstract away
+    -- from the handler type. But this doesn't appear to be feasible, as the
+    -- explicit handler type seems essential for working around the limitations of
+    -- the GHC type system.
+    --
+    -- In particular there seems to be no other way of encoding
+    -- subtraction of operations by a handler.
 
     handlerFun <-
       do
@@ -433,6 +415,8 @@ parseType s =
           (Exts.parseTypeWithMode
            (Exts.ParseMode ""
             [GADTs,
+             TypeFamilies, RankNTypes, FunctionalDependencies,
+             ScopedTypeVariables,
              MultiParamTypeClasses, FlexibleInstances, FlexibleContexts,
              TypeOperators] True True Nothing)
            s))
