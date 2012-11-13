@@ -101,8 +101,17 @@ intLog b x = if x < b then 0
                  divide x l = if x < b then l
                               else divide (x `div` b) (l+1)
 
+expoPipe :: Int -> Pipe Int Int h a
+expoPipe 0 = forever $ do {x <- await; yield $! x+1}
+expoPipe n = expoPipe (n-1) <+< expoPipe (n-1)
+
+blackhole :: Consumer a h b
+blackhole = forever await
+
 test1 = printer <+< sumTo 100000000 <+< count <+< produceFrom 0
 test2 = printer <+< sumTo 100000000 <+< count <+< count <+< produceFrom 0
 test3 = printer <+< sumTo 100000000 <+< count <+< count <+< count <+< produceFrom 0
 test4 = printer <+< sumTo 1000000000 <+< logger <+< produceFrom 0
-main = handleIO test1
+test5 = printer <+< take' 100 <+< expoPipe 10 <+< produceFrom 0
+test6 = blackhole <+< take' 1000 <+< expoPipe 13 <+< produceFrom 0
+main = handleIO test6

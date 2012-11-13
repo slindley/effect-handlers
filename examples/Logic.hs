@@ -35,7 +35,7 @@ allResults comp = allHandler comp
 failed = choose []
 
 [handler|
-  forward h.MaybeHandler a :: Maybe a
+  forward h.MaybeResults a :: Maybe a
     handles {Choose} where
       Choose xs k -> pickFirst xs
           where
@@ -50,8 +50,6 @@ failed = choose []
       --                            Nothing -> k v) Nothing l
       Return x   -> return (Just x)
 |]
-maybeResults :: Logic a -> Comp h (Maybe a)
-maybeResults comp = maybeHandler comp
 
 -- data Stack h a = Stack ([Stack h a -> Comp h a])
 -- [handler|

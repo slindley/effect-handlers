@@ -10,7 +10,7 @@
     FlexibleInstances
   #-}
 
-module Handlers where
+module MonoHandlers where
 
 -- CPS translation of handlers
 --
