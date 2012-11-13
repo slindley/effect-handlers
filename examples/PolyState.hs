@@ -1,4 +1,5 @@
 {-# LANGUAGE TypeFamilies,
+    GADTs,
     RankNTypes,
     MultiParamTypeClasses,
     QuasiQuotes,
@@ -65,7 +66,7 @@ forwardState' :: s -> SComp' (ForwardState h s a) s a -> Comp h a
 forwardState' s c = forwardState s c
 [operation|LogPut s :: s -> ()|]
 [handler|
-  forward h.(Handles h Get s, Handles h Put s, Handles h LogPut s) =>
+  forward h.((h `Handles` Get) s, Handles h Put s, Handles h LogPut s) =>
     PutLogger s a :: a
       handles {Put s} where
         Return  x     -> return x
