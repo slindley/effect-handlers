@@ -219,11 +219,6 @@ main = print (maximum (test10 13))
 -- test4 22: 2.4 seconds
 -- test5 22: 4.2 seconds
 
--- test10 11: 0.8 seconds
--- test10 12: 4.4 seconds
--- test10 13: ?
-
-
 -- test6 11: 0.5 seconds
 -- test6 12: 2.3 seconds
 -- test6 13: 15.0 seconds
@@ -239,3 +234,4 @@ main = print (maximum (test10 13))
 -- test9 11: 0.5 seconds
 -- test9 12: 2.3 seconds
 -- test9 13: 14.9 seconds
+
