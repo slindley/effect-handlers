@@ -8,13 +8,13 @@
 {-# LANGUAGE GADTs, TypeFamilies, NoMonomorphismRestriction, RankNTypes, ImpredicativeTypes,
     MultiParamTypeClasses, FlexibleInstances, OverlappingInstances, UndecidableInstances,
     FlexibleContexts, TypeOperators, ScopedTypeVariables, BangPatterns, 
-    DataKinds
+    QuasiQuotes
  #-}
 
 --import Control.Monad
 --import Control.Monad.State
 
-import Handlers
+import CodensityHandlers
 import DesugarHandlers
 
 type LChar = Maybe Char
@@ -50,14 +50,21 @@ en_str :: String -> I a -> I a
 en_str s comp = enStrHandler s comp
 
 
-                     
-data PureRunHandler (a :: *) = PureRunHandler
-type instance Result (PureRunHandler a) = a
-instance ((PureRunHandler a `Handles` GetC) ()) where
-  clause GetC k h = k Nothing h
-pureRun :: I a -> a
-pureRun comp = handle comp (\x _ -> x) PureRunHandler
-                     
+[handler|
+  PureRun a :: a handles {GetC} where
+    GetC   k -> k Nothing
+    Return x -> x
+|]
+
+-- data PureRunHandler (a :: *) = PureRunHandler
+-- type instance Result (PureRunHandler a) = a
+-- instance ((PureRunHandler a `Handles` GetC) ()) where
+--   clause GetC k h = k Nothing h
+-- pureRun :: I a -> a
+-- pureRun comp = handle comp (\x _ -> x) PureRunHandler
+
+
+
 countI :: Char -> I Int
 countI c = count' 0
   where
@@ -75,7 +82,13 @@ countH c s = pureRun (en_str s (countI c))
 test n = if n == 0 then ""
          else "abc" ++ test (n-1)
 
-main = putStrLn (show $ countH 'a' (test 100000000))
+main = print (countH 'a' (test 100000000))
+
+-- test 100000000 results:
+--   oleg: 13.4
+--   continuation monad: 9.7
+--   codensity: 13.9
+--   free monad: 17.3
 
 -- -- count :: Char -> String -> Int
 -- -- count c s = evalState (count' 0) s

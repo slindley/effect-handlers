@@ -10,6 +10,9 @@ countM =
       if n == 0 then return n
       else do {put (n-1); countM}}
 
-test1 = runState countM 20000000000
-test2 = count 20000000000
+test1 = runState countM 10000000000
+test2 = count 10000000000
 main = print test1
+
+-- test1: 8.0 seconds
+-- test2: 8.0 seconds

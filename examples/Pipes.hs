@@ -115,3 +115,6 @@ test4 = printer <+< sumTo 1000000000 <+< logger <+< produceFrom 0
 test5 = printer <+< take' 100 <+< expoPipe 10 <+< produceFrom 0
 test6 = blackhole <+< take' 1000 <+< expoPipe 13 <+< produceFrom 0
 main = handleIO test6
+
+-- test4: 21.8 seconds
+-- test6: 4.8 seconds

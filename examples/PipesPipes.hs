@@ -78,8 +78,6 @@ test6 = blackhole <+< take' 1000 <+< expoPipe 13 <+< produceFrom 0
 main = runPipe test6
 
 
--- test1 = printer <+< sumTo 100000000 <+< count <+< produceFrom 0
--- test2 = printer <+< sumTo 100000000 <+< count <+< count <+< produceFrom 0
--- test3 = printer <+< sumTo 100000000 <+< count <+< count <+< count <+< produceFrom 0
--- test4 = printer <+< sumTo 1000000000 <+< logger <+< produceFrom 0
--- main = runPipe test1
+-- test4: 23.5 seconds
+-- test6: 2.6 seconds
+

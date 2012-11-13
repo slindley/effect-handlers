@@ -1,4 +1,4 @@
-{-# LANGUAGE GADTs, TypeFamilies, NoMonomorphismRestriction, RankNTypes,
+{-# LANGUAGE GADTs, TypeFamilies, RankNTypes,
     MultiParamTypeClasses, FlexibleInstances, OverlappingInstances,
     FlexibleContexts, TypeOperators, UndecidableInstances,
     QuasiQuotes
@@ -7,8 +7,8 @@
 import Control.Monad
 import Control.Applicative
 
-import PolyHandlers
-import DesugarPolyHandlers
+import Handlers
+import DesugarHandlers
 
 
 [operation|forall a.Failure ::        a|]
@@ -24,14 +24,55 @@ data SomeList a = Last a | a :- SomeList a
 type Logic a = [handles|h {Choose}|] => Comp h a
 
 [handler|
-  forward h.AllHandler a :: [a]
+  AllResultsPure a :: [a]
     handles {Choose} where
-      Choose l k -> do {xss <- mapM k l; return (join xss)}
+      Choose l k -> concatMap k l
+      Return x   -> [x]
+|]
+
+-- [handler|
+--   AllResultsPure a :: [a]
+--     handles {Choose} where
+--       Choose l k -> step l []
+--                     where
+--                       step []     zs = zs
+--                       step (x:xs) zs = step xs (k x ++ zs)
+--       Return x   -> [x]
+-- |]
+
+
+-- big fat memory leak!
+[handler|
+  forward h.AllResultsLeaky a :: [a]
+    handles {Choose} where
+      Choose l k -> liftM concat (mapM k l)
       Return x   -> return [x]
 |]
-allResults :: Logic a -> Comp h [a] 
-allResults comp = allHandler comp
 
+
+[handler|
+  AllResultsSilly h a :: Comp h [a]
+    handles {Choose} where
+      Return x       -> return [x]
+      Choose l     k -> step l []
+                        where
+                          step []     zs = return zs
+                          step (x:xs) zs = do {ys <- k x; step xs (ys ++ zs)}
+|]
+
+
+[handler|
+  forward h.AllResults a :: [a]
+    handles {Choose} where
+      Return x       -> return [x]
+      Choose l     k -> step l []
+                        where
+                          step []     zs = return zs
+                          step (x:xs) zs = do {ys <- k x; step xs (ys ++ zs)}
+|]
+
+
+failed :: Logic a
 failed = choose []
 
 [handler|
@@ -125,18 +166,76 @@ queens n = foldM f [] [1..n] where
                 row <- [1..n],
                 safeAddition rows row 1]
 
+queens0 :: Int -> [[Int]]
+queens0 n = foldM f [] [1..n] where
+    f rows _ = do row <- [1..n]
+                  if (safeAddition rows row 1)
+                    then [row : rows]
+                    else []
+
 check b = if b then return ()
           else failed
 
---queens :: Int -> [[Int]]
+-- queens' :: Int -> Logic [Int]
+-- queens' n = foldM f [] [1..n] where
+--     f rows _ = do row <- choose [1..n]
+--                   check (safeAddition rows row 1)
+--                   return (row : rows)
+
+queens' :: Int -> Logic [Int]
 queens' n = foldM f [] [1..n] where
     f rows _ = do row <- choose [1..n]
-                  check (safeAddition rows row 1)
-                  return (row : rows)
+                  if (safeAddition rows row 1)
+                    then return (row : rows)
+                    else failed
+
+queens'' :: Int -> Logic [Int]
+queens'' n = foldM f [] [1..n] where
+    f rows _ = do row <- choose [1..n]
+                  if (safeAddition rows row 1)
+                    then return (row : rows)
+                    else failed
+
+
 
 test2 n = (handlePure . maybeResults) (queens' n)
 test3 n = (handlePure . maybeSuccess . successFailure)  (queens' n)
 test4 n = head (queens n)
 test5 n = (maybeSuccessRaw . successFailure)  (queens' n)
 
-main = print (test5 22)
+test6 n = (handlePure . allResults) (queens' n)
+test7 n = queens n
+test8 n = allResultsPure (queens' n)
+test9 n = (handlePure . allResultsSilly) (queens' n)
+test10 n = (handlePure . allResultsLeaky) (queens' n)
+
+
+
+main = print (maximum (test10 13))
+
+
+-- test2 22: 5.2 seconds
+-- test3 22: 4.2 seconds
+-- test4 22: 2.4 seconds
+-- test5 22: 4.2 seconds
+
+-- test10 11: 0.8 seconds
+-- test10 12: 4.4 seconds
+-- test10 13: ?
+
+
+-- test6 11: 0.5 seconds
+-- test6 12: 2.3 seconds
+-- test6 13: 15.0 seconds
+
+-- test7 11: 0.1 seconds
+-- test7 12: 0.5 seconds
+-- test7 13: 2.8 seconds
+
+-- test8 11: 0.1 seconds
+-- test8 12: 0.6 seconds
+-- test8 13: 3.6 seconds
+
+-- test9 11: 0.5 seconds
+-- test9 12: 2.3 seconds
+-- test9 13: 14.9 seconds

@@ -1,5 +1,6 @@
 {-# LANGUAGE TypeFamilies,
     GADTs,
+    NoMonomorphismRestriction,
     RankNTypes,
     MultiParamTypeClasses,
     QuasiQuotes,
@@ -13,7 +14,7 @@
 
 import Control.Monad
 import Data.IORef
-import Handlers
+import FreeHandlers
 import DesugarHandlers
 
 [operation|Get s :: s|]
@@ -59,11 +60,6 @@ type SComp s a =
       Get        k  s -> k s  s
       Put     s  k  _ -> k () s
 |]
-type SComp1 h f s a =
-  ((h' `Handles` Get) s, (h' `Handles` Put) s, f h s a ~ h') => Comp h' a
---forwardState' :: s -> SComp1 h ForwardState s a -> Comp h a  -- (Handles h Get s, Handles h Put s, h ~ ForwardState h' s a) => s -> Comp h a -> Comp h' a
-forwardState' :: s -> SComp' (ForwardState h s a) s a -> Comp h a
-forwardState' s c = forwardState s c
 [operation|LogPut s :: s -> ()|]
 [handler|
   forward h handles {Get s, Put s, LogPut s}.
@@ -157,3 +153,18 @@ test4 = do {r <- newIORef 1; iORefState r comp1}
 
 -- *Main> do {r <- newIORef 1; iORefState r comp1}
 -- 4
+
+countH :: SComp Int Int
+countH =
+    do {i <- get;
+        if i == 0 then return i
+        else do {put (i-1); countH}}
+
+
+test5 = print (simpleState 100000000 countH)
+test6 = (handleIO . forwardState 10000000000) countH
+
+main = test5
+
+-- test5: 10.1 seconds
+-- test6: 10.1 seconds

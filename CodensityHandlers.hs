@@ -29,6 +29,12 @@ instance Monad (RawComp h) where
   Ret v   >>= f = f v
   Do op k >>= f = Do op (\x -> k x >>= f)
 
+instance Monad (Comp c) where
+  return v     = Comp (\k -> k v)
+  Comp c >>= f = Comp (\k -> c (\x -> unComp (f x) k))
+instance Functor (Comp h) where
+  fmap f c = c >>= \x -> return (f x)
+
 doOp :: (h `Handles` op) e => op e u -> Comp h (Return (op e u))
 doOp op = Comp (\k -> Do op k)
 
@@ -55,14 +61,14 @@ type instance Result (IOHandler a) = IO a
 handleIO :: Comp (IOHandler a) a -> IO a
 handleIO comp = handle comp (\x _ -> return x) IOHandler 
 
--- [operation|Get s :: s|]
+--[operation|Get s :: s|]
 -- -- data Get (s :: *) (t :: ()) where
 -- --   Get :: Get s '()
 -- -- type instance Return (Get s '()) = s
 -- -- get :: ((h `Handles` Get) s) => Comp h s
 -- -- get = doOp Get
 
--- [operation|Put s :: s -> ()|]
+--[operation|Put s :: s -> ()|]
 -- -- data Put (s :: *) (t :: ()) where
 -- --   Put :: s -> Put s '()
 -- -- type instance Return (Put s '()) = ()
@@ -73,7 +79,7 @@ handleIO comp = handle comp (\x _ -> return x) IOHandler
 
 -- --type SComp s a = ((h `Handles` Get) s, (h `Handles` Put) s) => Comp h a
 -- --type SComp s a = (Handles h Get s, Handles h Put s) => Comp h a
--- type SComp s a = ([handles|h {Get s}|], [handles|h {Put s}|]) => Comp h a
+--type SComp s a = ([handles|h {Get s}|], [handles|h {Put s}|]) => Comp h a
 
 -- -- unfortunately this doesn't work...  We have a choice of parsing a
 -- -- type or a declaration. A single constraint is a type,
