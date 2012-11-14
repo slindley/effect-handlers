@@ -245,4 +245,7 @@ let rec repeat n =
   else (let x = mcbride_state 42 get in repeat (n-1))
 
 (* let _ = mcbride_state 10000 count *)
+let _ = handle_state 1000000 count
+
+
 
