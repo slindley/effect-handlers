@@ -26,18 +26,18 @@ type Logic a = [handles|h {Choose}|] => Comp h a
 [handler|
   AllResultsPure a :: [a]
     handles {Choose} where
-      Choose l k -> concatMap k l
       Return x   -> [x]
+      Choose l k -> concatMap k l
 |]
 
 -- [handler|
 --   AllResultsPure a :: [a]
 --     handles {Choose} where
+--       Return x   -> [x]
 --       Choose l k -> step l []
 --                     where
 --                       step []     zs = zs
 --                       step (x:xs) zs = step xs (k x ++ zs)
---       Return x   -> [x]
 -- |]
 
 
@@ -45,8 +45,8 @@ type Logic a = [handles|h {Choose}|] => Comp h a
 [handler|
   forward h.AllResultsLeaky a :: [a]
     handles {Choose} where
-      Choose l k -> liftM concat (mapM k l)
       Return x   -> return [x]
+      Choose l k -> liftM concat (mapM k l)
 |]
 
 
@@ -60,7 +60,6 @@ type Logic a = [handles|h {Choose}|] => Comp h a
                           step (x:xs) zs = do {ys <- k x; step xs (ys ++ zs)}
 |]
 
-
 [handler|
   forward h.AllResults a :: [a]
     handles {Choose} where
@@ -71,13 +70,13 @@ type Logic a = [handles|h {Choose}|] => Comp h a
                           step (x:xs) zs = do {ys <- k x; step xs (ys ++ zs)}
 |]
 
-
 failed :: Logic a
 failed = choose []
 
 [handler|
   forward h.MaybeResults a :: Maybe a
     handles {Choose} where
+      Return x    -> return (Just x)
       Choose xs k -> pickFirst xs
           where
             pickFirst []     = return Nothing
@@ -89,20 +88,17 @@ failed = choose []
       --                          case m of
       --                            Just _  -> return m
       --                            Nothing -> k v) Nothing l
-      Return x   -> return (Just x)
 |]
 
--- data Stack h a = Stack ([Stack h a -> Comp h a])
--- [handler|
---   forward h.(Handles h Failure Unit) => FirstHandler a :: Stack h a -> a
---     handles {Failure, Choose} where
---       Failure       k (Stack [])     -> failure
---       Failure       k (Stack (x:xs)) -> x (Stack xs)
---       Choose []     k (Stack [])     -> failure
---       Choose []     k (Stack (x:xs)) -> x (Stack xs)
---       Choose (a:as) k (Stack l)      -> k a (Stack (map k as ++ l))
---       Return x        _              -> return x
--- |]
+data Stack h a = Stack ([Stack h a -> Comp h a])
+[handler|
+  forward h handles {Failure}.FirstHandler a :: Stack h a -> a
+    handles {Choose} where
+      Return x        _              -> return x
+      Choose []     k (Stack [])     -> failure
+      Choose []     k (Stack (x:xs)) -> x (Stack xs)
+      Choose (a:as) k (Stack l)      -> k a (Stack (map k as ++ l))
+|]
 -- firstResult :: ((h `Handles` Failure) ()) => Logic a -> Comp h a
 -- firstResult comp = firstHandler (Stack []) comp
 
@@ -132,11 +128,11 @@ successOrFailure comp = successFailure comp
 [handler|
   IterativeHandler a :: Int -> (Bool, [a])
     handles {Choose} where
+      Return x   i -> if i == 0 then (False, [x]) else (False, [])
       Choose l k i -> if i == 0 then (True, [])
                       else
                         let (bs, xss) = unzip (map (\x -> k x $! i-1) l) in
                         (any id bs, concat xss)
-      Return x   i -> if i == 0 then (False, [x]) else (False, [])
 |]
 iterativeResults :: Logic a -> [[a]]
 iterativeResults comp =

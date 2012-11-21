@@ -11,22 +11,46 @@
     QuasiQuotes
  #-}
 
---import Control.Monad
---import Control.Monad.State
+import Control.Monad
 
-import CodensityHandlers
+import Handlers
 import DesugarHandlers
 
 type LChar = Maybe Char
 
 [operation|GetC :: LChar|]
--- data GetC (s :: ()) (t :: ()) where
+-- data GetC (s :: *) (t :: *) where
 --   GetC :: GetC () ()
 -- type instance Return (GetC () ()) = LChar
 -- getC :: ((h `Handles` GetC) ()) => Comp h LChar
 -- getC = doOp GetC
 
 type I a = forall h.[handles|h {GetC}|] => Comp h a
+
+getline :: I String
+getline = loop ""
+  where loop acc =
+          do w <- getC
+             check acc w
+        check acc (Just c) | c /= '\n' = loop (c:acc)
+        check acc _                    = return (reverse acc)
+
+[handler|
+  EvalHandler a :: String -> a handles {GetC} where
+    GetC     k ""    -> k Nothing ""
+    GetC     k (c:t) -> k (Just c) t
+    Return x   _     -> x
+|]
+
+eval :: String -> I a -> a
+eval s comp = evalHandler s comp
+
+getlines :: I [String]
+getlines = loop []
+  where loop acc = getline >>= check acc
+        check acc "" = return (reverse acc)
+        check acc l  = loop (l:acc)
+
 
 [handler|
   forward h handles {GetC}.EnStrHandler a :: String -> a
@@ -50,6 +74,18 @@ en_str :: String -> I a -> I a
 en_str s comp = enStrHandler s comp
 
 
+-- RunHandler throws away any outstanding unhandled GetC applications
+[handler|
+  forward h.RunHandler a :: a handles {GetC} where
+    GetC     k -> k Nothing
+    Return x   -> return x
+|]
+
+run :: I a -> Comp h a
+run comp = runHandler comp
+
+
+-- like RunHandler but with no underlying handler
 [handler|
   PureRun a :: a handles {GetC} where
     GetC   k -> k Nothing
@@ -62,6 +98,63 @@ en_str s comp = enStrHandler s comp
 --   clause GetC k h = k Nothing h
 -- pureRun :: I a -> a
 -- pureRun comp = handle comp (\x _ -> x) PureRunHandler
+
+
+
+data FlipState h a = FlipState Bool LChar (LChar -> FlipState h a -> Comp h a)
+[handler|
+  forward h handles {GetC}.
+    FlipHandler a :: FlipState h a -> a handles {GetC} where
+      GetC     kl (FlipState True  c kr) -> do {kr c (FlipState False c kl)}
+      GetC     kr (FlipState False _ kl) -> do {c <- getC; kl c (FlipState True c kr)}
+      Return x    _                      -> return x
+|]
+
+
+-- synchronise two iteratees
+(<|) :: I a -> I a -> I a
+l <| r = flipHandler (FlipState True Nothing (\Nothing s -> flipHandler s r)) l
+
+
+-- Roughly, we get the following behaviour from the synchronised
+-- traces of (l <| r):
+-- 
+--     ls1...GetC...ls2...GetC...  ...GetC...lsn
+--            ||           ||          ||
+--     rs1...GetC...rs2...GetC...  ...GetC...rsn
+--
+-- becomes:
+--
+--     ls1,rs1, GetC, ls2,rs2, GetC,...,GetC lsn,rsn
+
+-- fetch characters forever
+failure :: I a
+failure = getC >>= const failure
+
+empty :: a -> I a
+empty = return
+
+oneL :: I LChar
+oneL = getC
+
+one :: I Char
+one = oneL >>= maybe failure return
+
+pSat :: (LChar -> Bool) -> I LChar
+pSat pred = oneL >>= \c -> if pred c then return c else failure
+
+pGetline :: I String
+pGetline = nl <| liftM2 (:) one pGetline
+  where nl =
+          do
+            pSat (\c -> c == Just '\n' || c == Nothing)
+            return ""
+            
+pGetline' :: I String
+pGetline' = oneL >>= check
+  where check (Just '\n') = return ""
+        check Nothing     = return ""
+        check (Just c)    = liftM (c:) pGetline'
 
 
 

@@ -6,7 +6,7 @@
 -- sticks. They alternate turns until they run out of sticks. The
 -- winner is the player who takes the last stick.
 
-{-# LANGUAGE TypeFamilies, NoMonomorphismRestriction,
+{-# LANGUAGE TypeFamilies, NoMonomorphismRestriction, GADTs,
              FlexibleContexts, TypeOperators, UndecidableInstances,
              FlexibleInstances, MultiParamTypeClasses, OverlappingInstances,
              QuasiQuotes
@@ -33,7 +33,7 @@ data Player = Alice | Bob
 -- Move operation returning the winner.
 
 -- a game parameterised by the number of starting sticks
-game :: (h `Handles` Move) => Int -> Comp h Player
+game :: [handles|h {Move}|] => Int -> Comp h Player
 game = aliceTurn
 
 aliceTurn n =
@@ -93,9 +93,9 @@ bruteForce player n k =
 -- brute force vs perfect
 [handler|
   BP :: Player handles {Move} where
-    Return x     -> x
+    Return x        -> x
     Move Alice  n k -> bruteForce Alice n k
-    Move Bob n k -> perfect n k
+    Move Bob    n k -> perfect n k
 |]
 bp :: Int -> Player
 bp n = bP (game n)
@@ -143,7 +143,7 @@ mm n = handlePure (mM (game n))
 -- generate the move tree for a game in which Bob plays a perfect
 -- strategy
 [handler|
-  forward h.(h `Handles` Move) =>
+  forward h handles {Move}.
     MPIn :: MoveTree handles {Move} where
       Return x        -> return (Winner x)
       Move Alice n k -> reifyMove Alice n k
@@ -173,7 +173,7 @@ mp n = (mP . mPIn) (game n)
 --
 -- If the player chooses a valid number of sticks, then the game
 -- continues. If not, then the cheat operation is invoked.
-checkChoice :: (h `Handles` Move, h `PolyHandles` Cheat) =>
+checkChoice :: ([handles|h {Move}|], [handles|h {Cheat}|]) =>
                Player -> Int -> (Int -> Comp h a) -> Comp h a
 checkChoice player n k =
   do
@@ -183,12 +183,12 @@ checkChoice player n k =
 
 -- a game that checks for cheating
 [handler|
-  forward h.(h `Handles` Move, h `PolyHandles` Cheat) =>
+  forward h handles {Move, Cheat}.
     Check :: Player handles {Move} where
       Return x        -> return x
       Move player n k -> checkChoice player n k
 |]
-checkedGame :: (h `Handles` Move, h `PolyHandles` Cheat) => Int -> Comp h Player  
+checkedGame :: ([handles|h {Move}|], [handles|h {Cheat}|]) => Int -> Comp h Player  
 checkedGame n = check (game n)
 
 -- a cheating strategy: take all of the sticks, no matter how many
@@ -213,22 +213,22 @@ cp n = cP (game n)
 -- cheater is reported along with how many sticks they attempted to
 -- take
 [handler|
-  forward h.CheatEnd :: Player polyhandles {Cheat} where
+  forward h.CheatEnd :: Player handles {Cheat} where
     Return x         -> return x
     Cheat player n k -> error ("Cheater: " ++ show player ++ ", took; " ++ show n)
 |]
-cheaterEndingGame :: (h `Handles` Move) => Int -> Comp h Player
+cheaterEndingGame :: ([handles|h {Move}|]) => Int -> Comp h Player
 cheaterEndingGame n = cheatEnd (checkedGame n)
 
 -- a game in which if Alice cheats then Bob wins immediately, and if Bob
 -- cheats then Alice wins immediately
 [handler|
-  forward h.CheatLose :: Player polyhandles {Cheat} where
+  forward h.CheatLose :: Player handles {Cheat} where
     Return x        -> return x
     Cheat Alice n k -> return Bob
     Cheat Bob n k   -> return Alice   
 |]
-cheaterLosingGame :: (h `Handles` Move) => Int -> Comp h Player
+cheaterLosingGame :: ([handles|h {Move}|]) => Int -> Comp h Player
 cheaterLosingGame n = cheatLose (checkedGame n)
 
 -- Alice cheats against Bob's perfect strategy

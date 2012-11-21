@@ -38,15 +38,15 @@ accum x target ((y, v):l)                  = accum (x+y) target l
 
 type Prob = Double
 
-type DistFail h = (h `PolyHandles` Dist, h `PolyHandles` Failure)
-type LazyForce h = (h `PolyHandles` LetLazy, h `PolyHandles` Force)
+type DistFail h = ([handles|h {Dist}|], [handles|h {Failure}|])
+type LazyForce h = ([handles|h {LetLazy}|], [handles|h {Force}|])
 
 -- type P a = forall h.(DistFail h, LazyForce h) => Comp h a
 -- type Q a = forall h.DistFail h => Comp h a
 
-type P a = forall h.(h `PolyHandles` LetLazy, h `PolyHandles` Force,
-                     h `PolyHandles` Dist, h `PolyHandles` Failure) => Comp h a
-type Q a = forall h.(h `PolyHandles` Dist, h `PolyHandles` Failure) => Comp h a
+type P a = forall h.([handles|h {LetLazy}]|], [handles|h {Force}|],
+                     [handles|h {Dist}|], [handles|h {Failure}|]) => Comp h a
+type Q a = forall h.([handles|h {Dist}|], [handles|h {Failure}|]) => Comp h a
 
 data VC a = V a | C (PV a)
 --  deriving Show
@@ -56,7 +56,7 @@ instance (Show a) => Show (VC a) where
   show (V a) = show a
   show (C a) = ".."
 
-[handler|PVHandler a :: PV a polyhandles {Dist, Failure} where
+[handler|PVHandler a :: PV a handles {Dist, Failure} where
   Dist ps  k -> map (\(p, v) -> (p, C (k v))) ps
   Failure  k -> []
   Return x   -> [(1, V x)]
@@ -142,11 +142,11 @@ reflectUntil n choices =
 [operation|forall r.Stop a :: VC a -> r|]
 
 --type Q' a = forall h.(DistFail h, h `PolyHandles` Stop a) => Comp h a
-type Q' a = forall h.(h `PolyHandles` Dist, h `PolyHandles` Failure, h `PolyHandles` Stop a) => Comp h a
+type Q' a = forall h.([handles|h {Dist}|], [handles|h {Failure}|], [handles|h {Stop a}|]) => Comp h a
 
 [handler|
   forward h.ExploreHandler a :: Prob -> Map.Map a Prob -> Map.Map a Prob
-    polyhandles {Failure, Dist} where
+    handles {Failure, Dist} where
       Failure  k _ m -> return m
       Dist ps  k s m -> foldM (\m' (p, v) -> k v (s*p) m') m ps
       Return x   s m ->
@@ -162,7 +162,7 @@ exploreHandler' comp =
 
 [handler|
   ExploreUntilHandler a :: Prob -> Map.Map a Prob -> PV a -> (Map.Map a Prob, PV a)
-    polyhandles {Failure, Dist, Stop a} where
+    handles {Failure, Dist, Stop a} where
       Failure   k _ m susp -> (m, susp)
       Dist ps   k s m susp ->
         foldl
@@ -231,9 +231,9 @@ forceComp x m =
     Just (RightComp v) -> return (unsafeCoerce v, m)
 
 [handler|
-  forward h.(h `PolyHandles` Dist, h `PolyHandles` Failure) =>
+  forward h handles {Dist, Failure}.
     LetLazyHandler a :: Int -> CompMap -> a
-      polyhandles {LetLazy, Force} where
+      handles {LetLazy, Force} where
         LetLazy q         k x m ->
           k (LazyVar x) (x+1) (Map.insert x (LeftComp q) m)
         Force (LazyVar x) k y m ->
@@ -281,8 +281,8 @@ allHeads n =
 [operation|Rand :: Double|]
 
 [handler|
-  forward h.(h `Handles` Rand) => SampleHandler a :: a
-    polyhandles {Dist} where
+  forward h handles {Rand}.SampleHandler a :: a
+    handles {Dist} where
       Dist ps  k ->
         do
           r <- rand
@@ -294,9 +294,9 @@ allHeads n =
 
 -- what's this for?
 [handler|
-  forward h.(h `Handles` Rand) =>
+  forward h handles {Rand}.
     ImportanceHandler a :: Int -> Double -> [(Prob, a)]
-      polyhandles {Dist,Failure} where
+      handles {Dist,Failure} where
         Dist ps k n s ->
           do
             r <- rand
@@ -307,13 +307,13 @@ allHeads n =
 |]
 
 
-importanceSample :: (Ord a, h `Handles` Rand, h `PolyHandles` Dist) => Int -> Q a -> Comp h a
+importanceSample :: (Ord a, [handles|h {Rand}|], [handles|h {Dist}|]) => Int -> Q a -> Comp h a
 importanceSample i comp =
   do 
     ps <- importance 1.0 (reify0 comp)
     dist ps
     where
-      importance :: (Ord a, h `Handles` Rand) => Double -> PV a -> Comp h ([(Prob, a)])
+      importance :: (Ord a, [handles| h {Rand}|]) => Double -> PV a -> Comp h ([(Prob, a)])
       importance s pv' =
         case cs of
           [] -> return vs
@@ -354,18 +354,18 @@ importanceSamples' i pv comp n =
 [handler|
   forward h.
     SampleLoop a :: Comp (SampleLoop h a) a -> a
-      polyhandles {Failure} where
+      handles {Failure} where
         Failure  k comp -> sampleLoop comp comp
         Return x   _    -> return x
 |]
 
-sample :: (h `Handles` Rand, h `PolyHandles` Failure) => Q a -> Comp h a 
+sample :: ([handles|h {Rand}|], [handles|h {Failure}|]) => Q a -> Comp h a 
 sample comp = sampleHandler comp
 
 sampleLoop' :: Q a -> IO a
 sampleLoop' comp = handleIO (sampleLoop (sample comp) (sample comp))
 
-instance IOHandler a `Handles` Rand where
+instance (IOHandler a `Handles` Rand) () where
   clause Rand k h =
     do
       r <- getStdRandom random

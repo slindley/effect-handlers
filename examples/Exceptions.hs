@@ -1,5 +1,5 @@
 {-# LANGUAGE TypeFamilies, NoMonomorphismRestriction,
-    RankNTypes,
+    RankNTypes, GADTs,
     MultiParamTypeClasses, TemplateHaskell, QuasiQuotes, FlexibleInstances,
     OverlappingInstances, UndecidableInstances,
     FlexibleContexts, TypeOperators, ScopedTypeVariables #-}
@@ -17,7 +17,7 @@ import DesugarHandlers
       Return x     -> return x                                   
 |]
 [handler|
-  forward h.(h `PolyHandles` DivideByZero, h `Handles` Divide) =>
+  forward h handles {DivideByZero, Divide}.
     CheckZeroHandler a :: a
       handles {Divide} where
         Divide x y k -> if y == 0 then divideByZero
@@ -26,15 +26,14 @@ import DesugarHandlers
 |]
 [handler|
   forward h.ReportErrorHandler a :: Either String a
-    polyhandles {DivideByZero} where
+    handles {DivideByZero} where
       DivideByZero k -> return $ Left "Cannot divide by zero"
       Return x       -> return (Right x)
 |]
 
-
-type D a   = forall h.(h `Handles` Divide) => Comp h a
-type DZ a  = forall h.(h `PolyHandles` DivideByZero) => Comp h a
-type DDZ a = forall h.(h `PolyHandles` DivideByZero, h `Handles` Divide) => Comp h a
+type D a   = forall h.[handles|h {Divide}|] => Comp h a
+type DZ a  = forall h.[handles|h {DivideByZero}|] => Comp h a
+type DDZ a = forall h.([handles|h {DivideByZero}|], [handles|h {Divide}|]) => Comp h a
 
 divUnchecked :: D a -> a
 divUnchecked comp = (handlePure . divideHandler) comp 
