@@ -14,7 +14,7 @@
 
 import Control.Monad
 import Data.IORef
-import FreeHandlers
+import CodensityHandlers
 import DesugarHandlers
 
 [operation|Get s :: s|]
@@ -60,9 +60,21 @@ type SComp s a =
       Get        k  s -> k s  s
       Put     s  k  _ -> k () s
 |]
+-- data ForwardState h s a = ForwardState s
+-- type instance Result (Forward h s a) = Comp h a
+-- instance (ForwardState h s a `Handles` Get) s where
+--     clause Get k' (ForwardState s) = k s s
+--         where
+--           k v s = k' v (ForwardState s)
+-- instance (h `Handles` op) t => (ForwardState h s a `Handles` op) t where
+--     clause op k h = do {x <- doOp op; k x h}
+
+-- forwardState :: s -> Comp (ForwardState h s a) a -> Comp h a
+-- forwardState :: (h `Handles` {Get, Put | e}, parent `Handles` {|e}) -> Comp h a -> Comp parent a
+
 [operation|LogPut s :: s -> ()|]
 [handler|
-  forward h handles {Get s, Put s, LogPut s}.
+  forward h handles {Put s, LogPut s}.
     PutLogger s a :: a
       handles {Put s} where
         Return  x     -> return x
@@ -101,10 +113,6 @@ statePrintLog s comp = (handleIO . logPutPrinter . forwardState s . putLogger) c
 
 type SComp' h s a =
   ((h `Handles` Get) s, (h `Handles` Put) s) => Comp h a
-
-
--- foo :: SComp' h s a -> ()
--- foo _ = ()
 
 [operation|forall a.Err :: String -> a|]
 [handler|

@@ -53,14 +53,14 @@ handleIO :: Comp (IOHandler a) a -> IO a
 handleIO comp = handle comp (\x _ -> return x) IOHandler 
 
 -- [operation|Get s :: s|]
--- -- data Get (s :: *) (t :: ()) where
--- --   Get :: Get s '()
+-- -- data Get (e :: *) (u :: *) where
+-- --   Get :: Get s ()
 -- -- type instance Return (Get s '()) = s
 -- -- get :: ((h `Handles` Get) s) => Comp h s
 -- -- get = doOp Get
 
 -- [operation|Put s :: s -> ()|]
--- -- data Put (s :: *) (t :: ()) where
+-- -- data Put (e :: *) (u :: *) where
 -- --   Put :: s -> Put s '()
 -- -- type instance Return (Put s '()) = ()
 -- --put :: ((h `Handles` Put) s) => s -> Comp h ()

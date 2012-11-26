@@ -30,7 +30,12 @@ instance (SimpleState a `Handles` Put) where
 instance (SimpleState a `Handles` Get) where
   clause Get k (SimpleState s) = simpleState s (k s)
 simpleState s comp = handle comp (\x _ -> x) (SimpleState s)
+<<<<<<< HEAD
 --simpleState' s comp = simpleState s (Comp (\k -> comp >>= k))
+=======
+--simpleState' s comp = handle' comp (\x _ -> x) (SimpleState s)
+--simpleState s comp = simpleState' s (lower comp)
+>>>>>>> 8f8769e15f4fc58c2ec83eef8fb3b34844b648e5
 
 
 countH =

@@ -11,8 +11,10 @@ type family Return op :: *
 type family Result h :: *
 type family Inner h :: *     
 
+-- To achieve adequate performance it seems essential to have the
+-- continuation return a RawComp and expose handle'.
 class Handles h op where
-  clause :: op -> (Return op -> Comp h (Inner h)) -> h -> Result h
+  clause :: op -> (Return op -> RawComp h (Inner h)) -> h -> Result h
 
 newtype Comp h a = Comp {unComp :: forall r.(a -> RawComp h r) -> RawComp h r}
 data RawComp h a where
@@ -42,13 +44,10 @@ doOp op = Comp (\k -> Do op k)
 
 handle :: Comp h (Inner h) -> (Inner h -> h -> Result h) -> h -> Result h
 handle comp = handle' (lower comp)
-  where
-    handle' :: RawComp h (Inner h) -> (Inner h -> h -> Result h) -> h -> Result h
-    handle' (Ret v)   r h = r v h
-    handle' (Do op k) r h = clause op (\x -> lift (k x)) h
 
--- k :: (Return op -> RawComp h (Inner h)
--- ? :: (Return op -> Comp h (Inner h))
+handle' :: RawComp h (Inner h) -> (Inner h -> h -> Result h) -> h -> Result h
+handle' (Ret v)   r h = r v h
+handle' (Do op k) r h = clause op k h
 
 -- pure handlers
 data PureHandler a = PureHandler

@@ -1,4 +1,4 @@
-{- Fully general open handlers making essential use of DataKinds -}
+{- Open handlers -}
 
 {-# LANGUAGE TypeFamilies,
     MultiParamTypeClasses,
@@ -16,9 +16,6 @@
 module Handlers where
 
 import DesugarHandlers
-import GHC.Tuple
-
-type Unit = ()
 
 type family Return (opApp :: *) :: *
 type family Result (h :: *) :: *

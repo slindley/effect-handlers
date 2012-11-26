@@ -194,7 +194,7 @@ makeHandlerDef (h, name, ts, sig, r, cs) =
         handlerType =
           DataD [] cname
                     (map (\tv -> KindedTV tv StarT) tyvars)
-                    [NormalC cname (map (\arg -> (NotStrict, arg)) args)]
+                    [NormalC cname (map (\arg -> (IsStrict, arg)) args)]
                     []
         resultInstance =
           TySynInstD (mkName "Result")
@@ -374,7 +374,7 @@ makeOpDefs (us, name, ts, sig) =
           DataD [] cname
             [KindedTV evar ekind, KindedTV uvar ukind]
             [ForallC (map PlainTV tyvars) [EqualP (VarT evar) eimp, EqualP (VarT uvar) uimp]
-             (NormalC cname (map (\arg -> (NotStrict, arg)) args))]            
+             (NormalC cname (map (\arg -> (IsStrict, arg)) args))]            
             []
         returnInstance =
           TySynInstD (mkName "Return")
