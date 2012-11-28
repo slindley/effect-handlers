@@ -5,22 +5,26 @@
              MultiParamTypeClasses,
              OverlappingInstances, UndecidableInstances,
              FlexibleInstances,
-             QuasiQuotes
+             QuasiQuotes,
+             DataKinds,
+             GADTs
   #-}
+
+module DelimitedContinuations where
 
 import DesugarHandlers
 import Handlers
 
 [operation|forall a.Shift0 r :: ((a -> r) -> r) -> a|]
 [handler|
-  Reset0 r a :: r polyhandles {Shift0 r} where
+  Reset0 r a :: r handles {Shift0 r} where
     Return x   -> x
     Shift0 p k -> p k
 |]
 
 [operation|forall a.Shift h r :: ((a -> r) -> Comp (Reset h r a) r) -> a|]
 [handler|
-  Reset h r a :: r polyhandles {Shift h r} where
+  Reset h r a :: r handles {Shift h r} where
     Return x   -> x
     Shift p  k -> reset (p k)
 |]
@@ -34,7 +38,7 @@ import Handlers
 [operation|forall a.Shift0F h r :: ((a -> Comp h r) -> Comp h r) -> a|]
 [handler|
   forward h.
-    Reset0F r a :: r polyhandles {Shift0F h r} where
+    Reset0F r a :: r handles {Shift0F h r} where
       Return x    -> return x
       Shift0F p k -> p k
 |]
@@ -42,7 +46,7 @@ import Handlers
 [operation|forall a.ShiftF h r :: ((a -> Comp h r) -> Comp (ResetF h r a) r) -> a|]
 [handler|
   forward h. 
-    ResetF r a :: r polyhandles {ShiftF h r} where
+    ResetF r a :: r handles {ShiftF h r} where
       Return x    -> return x
       ShiftF p  k -> resetF (p k)
 |]
