@@ -10,23 +10,42 @@
     TypeOperators
  #-}
 
-
 module Cont where
 
 import Control.Monad.Cont
 import DesugarHandlers
 
--- Free monads as continuation monads
--- Cont r a ~ (a -> r) -> r
-type StateComp r a = Cont ((() -> (Int -> r) -> r) ->   -- get :: () -> Int
-                           (Int -> (() -> r) -> r) ->   -- put :: Int -> ()
-                           r) a
-
--- forall r.StateComp r a is the Church encoding of DataState
+-- We start with a free monad for state
 data DataState a =
     RetDS a
   | GetDS ()  (Int -> DataState a)
   | PutDS Int (()  -> DataState a)
+
+instance Monad DataState where
+  return = RetDS
+  RetDS v >>= f = f v
+  GetDS () k >>= f = GetDS () (\x -> k x >>= f)
+  PutDS s  k >>= f = PutDS s  (\x -> k x >>= f)
+
+getDS :: () -> DataState Int
+getDS () = GetDS () return
+
+putDS :: Int -> DataState ()
+putDS s  = PutDS s return
+
+
+-- Now we turn it into a continuation monad:
+--   forall r.ContState r a is the Church encoding of DataState
+--   (Cont r a ~= (a -> r) -> r)
+type ContState r a = Cont ((() -> (Int -> r) -> r) ->   -- get :: () -> Int
+                           (Int -> (() -> r) -> r) ->   -- put :: Int -> ()
+                           r) a
+
+getCont :: () -> ContState r Int
+getCont () = cont (\k get put -> get () (\s -> k s get put))
+
+putCont :: Int -> ContState r ()
+putCont s = cont (\k get put -> put s (\() -> k () get put))
 
 -- A handler for DataState takes a return clause and a clause for each
 -- operation (get and put).
@@ -34,6 +53,7 @@ handleDataState :: DataState a -> (a -> r) -> (() -> (Int -> r) -> r) -> (Int ->
 handleDataState (RetDS v)    ret get put = ret v
 handleDataState (GetDS () k) ret get put = get () (\x -> handleDataState (k x) ret get put) 
 handleDataState (PutDS s  k) ret get put = put s  (\x -> handleDataState (k x) ret get put)
+
 
 -- A handler for a continuation computation is just a function that
 -- instantiates the return type with a concrete type.
@@ -49,12 +69,12 @@ handleCont = runCont
 --
 -- Typically an actual top-level return clause will ignore the put and
 -- get arguments.
-handleStateComp :: StateComp r a ->
+handleContState :: ContState r a ->
                    (a -> (() -> (Int -> r) -> r) -> (Int -> (() -> r) -> r) -> r) ->  -- return
                    (() -> (Int -> r) -> r) ->                                         -- get
                    (Int -> (() -> r) -> r) ->                                         -- put
                    r
-handleStateComp = handleCont
+handleContState = handleCont
 
 -- The definitions of equivalent free and continuation-based handlers
 -- are now very similar.
@@ -67,8 +87,8 @@ simpleStateFree s comp = handleDataState
                          (\s  k _ -> k () s)  -- put clause
                          s                    -- handler parameter
                       
-simpleStateCont :: Int -> StateComp (Int -> a) a -> a
-simpleStateCont s comp = handleStateComp
+simpleStateCont :: Int -> ContState (Int -> a) a -> a
+simpleStateCont s comp = handleContState
                          comp
                          (\x    get put s -> x)       -- return clause
                          (\() k         s -> k s  s)  -- get clause
