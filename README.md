@@ -11,5 +11,5 @@ Written by Ohad Kammar, Sam Lindley and Nicolas Oury.
   * Racket: handlers.rkt
 
 See the
-[draft paper](http://homepages.inf.ed.ac.uk/slindley/papers/handlers-draft-novemeber2012.pdf)
+[draft paper](http://homepages.inf.ed.ac.uk/slindley/papers/handlers-draft-november2012.pdf)
 for further details.
