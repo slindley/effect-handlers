@@ -15,4 +15,4 @@ See the
 for further details.
 
 (An earlier draft is also available
-[here](http://homepages.inf.ed.ac.uk/slindley/papers/handlers.pdf).
+[here](http://homepages.inf.ed.ac.uk/slindley/papers/handlers.pdf).)
