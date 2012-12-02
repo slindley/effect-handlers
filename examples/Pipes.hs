@@ -49,11 +49,11 @@ take' n =
     putString "You shall not pass!"
 
 [operation|PutString :: String -> ()|]
-instance (IOHandler a `Handles` PutString) () where
-  clause (PutString s) k h =
-    do
-      putStrLn s
-      k () h
+[handler|
+  PrintHandler a :: IO a handles {PutString} where
+    Return x      -> return x
+    PutString s k -> do {putStrLn s; k ()}
+|]
 
 printer :: (h `Handles` PutString) () => Consumer Int h r
 printer =
@@ -114,7 +114,7 @@ test3 = printer <+< sumTo 100000000 <+< count <+< count <+< count <+< produceFro
 test4 = printer <+< sumTo 1000000000 <+< logger <+< produceFrom 0
 test5 = printer <+< take' 100 <+< expoPipe 10 <+< produceFrom 0
 test6 = blackhole <+< take' 1000 <+< expoPipe 13 <+< produceFrom 0
-main = handleIO test6
+main = printHandler test6
 
 -- test4: 21.8 seconds
 -- test6: 4.8 seconds

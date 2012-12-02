@@ -8,6 +8,7 @@ import Control.Monad
 import Control.Applicative
 
 import Handlers
+import TopLevel
 import DesugarHandlers
 
 
@@ -193,17 +194,16 @@ queens'' n = foldM f [] [1..n] where
                     else failed
 
 
-
-test2 n = (handlePure . maybeResults) (queens' n)
-test3 n = (handlePure . maybeSuccess . successFailure)  (queens' n)
+test2 n = (handlePure (maybeResults (queens' n)))
+test3 n = (handlePure ((maybeSuccess . successFailure)  (queens' n)))
 test4 n = head (queens n)
 test5 n = (maybeSuccessRaw . successFailure)  (queens' n)
 
-test6 n = (handlePure . allResults) (queens' n)
+test6 n = handlePure (allResults (queens' n))
 test7 n = queens n
 test8 n = allResultsPure (queens' n)
-test9 n = (handlePure . allResultsSilly) (queens' n)
-test10 n = (handlePure . allResultsLeaky) (queens' n)
+test9 n = handlePure (allResultsSilly (queens' n))
+test10 n = handlePure (allResultsLeaky (queens' n))
 
 
 
