@@ -17,7 +17,7 @@ sig
   val (|->) : ('p,'r) op -> ('p -> ('h -> 'r -> 'a) -> 'a) -> ('a, 'h) clause
 
   val plain : ('p,'r) op -> ('p -> ('r -> 'a) -> 'a) -> ('a, 'h) clause
-  val mcbride : ('p,'r) op -> ('p -> ('r -> 'a) -> 'a) -> ('a, 'h) clause
+  val shallow : ('p,'r) op -> ('p -> ('r -> 'a) -> 'a) -> ('a, 'h) clause
   val local : ('p,'r) op -> ('p -> 'r) -> ('a, 'h) clause
   val escape : ('p,'r) op -> ('p -> 'a) -> ('a, 'h) clause
 
@@ -109,21 +109,7 @@ struct
        else
          None}
 
-  (* McBride clauses are implemented with control0 instead of shift0.
-     They correspond with Conor McBride's version of handlers in
-     Frank. The key difference between McBride clauses and standard
-     clauses is that the continuation is not automatically re-handled
-     by a McBride clause. This functionality can be used to implement
-     parameterised handlers. It can also be used to give
-     implementations of prompt and prompt0 as handlers.
-
-     Our current implementation of McBride clauses seems to have a
-     severe memory leak.
-
-     Perhaps parameterised handlers are easier to implement more
-     efficiently and offer most of the benefits of McBride
-     handlers. *)
-  let mcbride op body =
+  let shallow op body =
     {clause = fun prompt effector op' ->
       if op == Obj.magic op' then
         Some (fun p ->
@@ -215,64 +201,64 @@ let parameterised_state s m =
      (fun x -> x))
     s
 
-let rec mcbride_state s m =
+let rec shallow_state s m =
   handle m
     ((fun () ->
         [local   get (fun ()  -> s);
-         mcbride put (fun s k -> mcbride_state s k)]),
+         shallow put (fun s k -> shallow_state s k)]),
      (fun x -> x)) ()
 
-let rec mcbride_state' s m =
+let rec shallow_state' s m =
   handle m
     ((function
       | `Handle ->
         [local get     (fun ()   -> s);
-               put |-> (fun s  k -> mcbride_state' s (fun () -> k `Forward ()))]
+               put |-> (fun s  k -> shallow_state' s (fun () -> k `Forward ()))]
       | `Forward ->
         []),
      (fun x -> x)) `Handle
 
-let rec mcbride_state''' s m =
+let rec shallow_state''' s m =
   handle_plain m
     ([plain get (fun () k -> 
       function
         | `Handle ->
-          mcbride_state''' s (fun () -> k s `Forward) `Handle
+          shallow_state''' s (fun () -> k s `Forward) `Handle
         | `Forward ->
           k (get ()) `Forward);
       plain put (fun s k ->
         function
           | `Handle ->
-            mcbride_state''' s (fun () -> k () `Forward) `Handle
+            shallow_state''' s (fun () -> k () `Forward) `Handle
           | `Forward ->
             k (put s) `Forward)],
      (fun x _ -> x))
 
-let rec mcbride_state'''' s m =
+let rec shallow_state'''' s m =
   function
     | `Handle ->
       handle_plain m
         ([plain get (fun () k h -> 
-            mcbride_state'''' s (fun () -> k s `Forward) h);
+            shallow_state'''' s (fun () -> k s `Forward) h);
           plain put (fun s k h ->
-            mcbride_state'''' s (fun () -> k () `Forward) h)],
+            shallow_state'''' s (fun () -> k () `Forward) h)],
          (fun x _ -> x)) `Handle
     | `Forward -> m () 
  
 
 
 
-let handle_mcbride m (op_clauses, return_clause) =
+let handle_shallow m (op_clauses, return_clause) =
   handle m
     ((function
       | `Handle   -> op_clauses
       | `Forward -> []),
      (fun x -> x)) `Handle
 
-let rec mcbride_state'' s m =
-  handle_mcbride m
+let rec shallow_state'' s m =
+  handle_shallow m
     ([local get     (fun ()  -> s);
-            put |-> (fun s k -> mcbride_state'' s (fun () -> k `Forward ()))],
+            put |-> (fun s k -> shallow_state'' s (fun () -> k `Forward ()))],
      (fun x -> x))
 
 let no_state m =
@@ -328,6 +314,6 @@ let rec count : unit -> unit =
 
 (* let rec repeat n = *)
 (*   if n = 0 then () *)
-(*   else (let x = mcbride_state 42 get in repeat (n-1)) *)
+(*   else (let x = shallow_state 42 get in repeat (n-1)) *)
 
-(* (\* let _ = mcbride_state 10000 count *\) *)
+(* (\* let _ = shallow_state 10000 count *\) *)
