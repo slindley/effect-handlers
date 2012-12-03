@@ -6,6 +6,7 @@
 
 import Control.Monad
 import Handlers
+import TopLevel
 import DesugarHandlers
 
 [operation|Divide :: Int -> Int -> Int|]
@@ -36,8 +37,8 @@ type DZ a  = forall h.[handles|h {DivideByZero}|] => Comp h a
 type DDZ a = forall h.([handles|h {DivideByZero}|], [handles|h {Divide}|]) => Comp h a
 
 divUnchecked :: D a -> a
-divUnchecked comp = (handlePure . divideHandler) comp 
+divUnchecked comp = handlePure (divideHandler comp)
 
 divChecked :: D a -> Either String a
-divChecked comp = (handlePure . reportErrorHandler . divideHandler . checkZeroHandler) comp
+divChecked comp = handlePure ((reportErrorHandler . divideHandler . checkZeroHandler) comp)
 

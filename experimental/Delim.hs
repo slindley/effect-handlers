@@ -1,19 +1,22 @@
-{- This code illustrates how the continuation monad can be used to
-   implement standard handlers over a free-monad via a Church
-   encoding. -}
+{- Attempting to derive an implementation in terms of delimited
+   continuations. -}
 
 {-# LANGUAGE TypeFamilies,
     GADTs,
     RankNTypes,
     MultiParamTypeClasses,
     FlexibleContexts,
-    TypeOperators
+    TypeOperators,
+    QuasiQuotes,
+    ScopedTypeVariables
  #-}
 
-module Cont where
+
+module Delim where
 
 import Control.Monad.Cont
 import DesugarHandlers
+import DelimitedContinuations
 
 -- We start with a free monad for state
 data DataState a =
@@ -138,3 +141,40 @@ simpleState s comp = handle
                      comp
                      (\x (SimpleState s) -> x)  -- return
                      (SimpleState s)            -- handler parameter
+
+
+
+
+-- Now we show how the delimited continuations implementation arises.
+-- For convenience we import an implementation of delimited
+-- continuations in terms of handlers.
+
+type DelimState r a = DelimComp ((() -> (Int -> r) -> r) ->   -- get :: () -> Int
+                                 (Int -> (() -> r) -> r) ->   -- put :: Int -> ()
+                                 r) a
+
+type DelimState' r a = DelimComp' ((() -> (Int -> r) -> r) ->   -- get :: () -> Int
+                                   (Int -> (() -> r) -> r) ->   -- put :: Int -> ()
+                                   r) a
+
+--getDelim :: () -> DelimState' r Int
+getDelim () = shift0 (\k get put -> get () (\s -> k s get put))
+ 
+
+handleDelimState :: DelimState r a ->
+                    -- (a -> (() -> (Int -> r) -> r) -> (Int -> (() -> r) -> r) -> r) ->  -- return
+                    -- (r -> r) ->
+                    (() -> (Int -> r) -> r) ->   -- get
+                    (Int -> (() -> r) -> r) ->   -- put
+                    r
+handleDelimState comp get put = reset0 comp get put
+  -- reset0WithReturn comp (\_ Reset0 -> undefined) get put
+
+ret v = return (\get put s -> v)
+
+simpleStateDelim :: Int -> DelimState (Int -> a) a -> a
+simpleStateDelim s comp = handleDelimState
+                          comp
+                          (\() k         s -> k s  s)  -- get clause
+                          (\s  k         _ -> k () s)  -- put clause
+                          s                            -- handler parameter

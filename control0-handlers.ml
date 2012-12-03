@@ -1,5 +1,5 @@
 (*
-  McBride handlers in OCaml using Oleg's implementation of
+  Shallow handlers in OCaml using Oleg's implementation of
   control0 and prompt0 in terms of shift and reset.
 
   This implementation of control0 has the same memory leak problems as
@@ -162,10 +162,10 @@ open Eff
 let get : (unit, int) op = new_op ()
 let put : (int, unit) op = new_op ()
 
-let rec mcbride_state s m =
+let rec shallow_state s m =
   handle m
-    ([get |-> (fun () k -> mcbride_state s (fun () -> k s));
-      put |-> (fun s  k -> mcbride_state s (fun () -> k ()))],
+    ([get |-> (fun () k -> shallow_state s (fun () -> k s));
+      put |-> (fun s  k -> shallow_state s (fun () -> k ()))],
      fun x -> x)
 
 let rec count : unit -> unit = fun () ->
@@ -173,4 +173,4 @@ let rec count : unit -> unit = fun () ->
     if n = 0 then ()
     else (put (n-1); count())
 
-(* mcbride_state 1000 count eats up memory *)
+(* shallow_state 1000 count eats up memory *)

@@ -15,6 +15,7 @@
 import Control.Monad
 import Data.IORef
 import CodensityHandlers
+import CodensityTopLevel
 import DesugarHandlers
 
 [operation|Get s :: s|]
@@ -96,17 +97,17 @@ type SComp s a =
 |]
 
 [operation|PrintLine :: String -> ()|]
-instance (IOHandler a `Handles` PrintLine) () where
-  clause (PrintLine s) k h =
-    do
-      putStrLn s
-      k () h
+[handler|
+  PrintHandler a :: IO a handles {PrintLine} where
+    Return x      -> return x
+    PrintLine s k -> do {putStrLn s; k ()}
+|]
 
-stateWithLog :: s -> SComp s a -> (a, [s]) 
-stateWithLog s comp = (handlePure . logPutReturner . forwardState s . putLogger) comp
+stateWithLog :: s -> SComp s a -> (a, [s])
+stateWithLog s comp = handlePure ((logPutReturner . forwardState s . putLogger) comp)
 
 statePrintLog :: Show s => s -> SComp s a -> IO a 
-statePrintLog s comp = (handleIO . logPutPrinter . forwardState s . putLogger) comp
+statePrintLog s comp = printHandler ((logPutPrinter . forwardState s . putLogger) comp)
 
 --putLogger :: SComp s a -> ((h `Handles` LogPut) s) => SComp' h s a
 --putLogger :: (((h `Handles` LogPut) s) => SComp' h s a) -> ((h `Handles` LogPut) s) => SComp' h s a
