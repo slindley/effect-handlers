@@ -15,8 +15,6 @@
 
 module Handlers where
 
-import DesugarHandlers
-
 type family Return (opApp :: *) :: *
 type family Result (h :: *) :: *
 class ((h :: *) `Handles` (op :: j -> k -> *)) (e :: j) | h op -> e where
