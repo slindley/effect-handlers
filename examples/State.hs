@@ -54,6 +54,32 @@ type SComp s a =
 |]
 
 
+-- Oops!
+--
+-- The following doesn't work because we need a type constraint
+-- [|handles|h {Err}|] and we currently have no way of writing it.
+--
+-- [handler|
+--   forall h handles {Err}.ForwardState0 h s a :: s -> Comp h a
+--     handles {Get s, Put s, Err} where
+--       Return  x     _ -> return x
+--       Get        k  s -> k s  s
+--       Put     s  k  _ -> k () s
+--       Err     m  k  s -> do {x <- err m; k x s}
+-- |]
+--
+-- Here's one (rather ugly) fix:
+newtype WrappedComp h c a = Wrap {unWrap :: c => Comp h a}
+type WrappedErrComp h a = WrappedComp h [handles|h {Err}|] a
+[handler|
+  ForwardState0 h s a :: s -> WrappedErrComp h a
+    handles {Get s, Put s, Err} where
+      Return  x     _ -> Wrap (return x)
+      Get        k  s -> k s  s
+      Put     s  k  _ -> k () s
+      Err     m  k  s -> Wrap (do {x <- err m; unWrap (k x s)})
+|]
+
 [handler|
   forward h.ForwardState s a :: s -> a 
     handles {Get s, Put s} where
