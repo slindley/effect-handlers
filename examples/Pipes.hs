@@ -16,8 +16,8 @@ type Pipe i o h a   = ((h `Handles` Await) i, (h `Handles` Yield) o) => Comp h a
 type Consumer i h a = (h `Handles` Await) i => Comp h a
 type Producer o h a = (h `Handles` Yield) o => Comp h a
 
-data Prod s r = Prod (() -> Cons s r -> r)
-data Cons s r = Cons (s  -> Prod s r -> r)
+newtype Prod s r = Prod (() -> Cons s r -> r)
+newtype Cons s r = Cons (s  -> Prod s r -> r)
 
 [handler|
   forward h.Down s a :: Prod s (Comp h a) -> a
@@ -70,6 +70,14 @@ produceFrom i =
     yield i
     produceFrom $! i+1
 
+produceFromTo :: Int -> Int -> Producer Int h ()
+produceFromTo i j =
+  do
+    if i == j then return ()
+      else do yield i
+              (produceFromTo $! i+1) j
+
+
     
 count :: Pipe i Int h a
 count =
@@ -108,13 +116,17 @@ expoPipe n = expoPipe (n-1) <+< expoPipe (n-1)
 blackhole :: Consumer a h b
 blackhole = forever await
 
+
+test0 n = blackhole <+< produceFromTo 1 n
 test1 = printer <+< sumTo 100000000 <+< count <+< produceFrom 0
 test2 = printer <+< sumTo 100000000 <+< count <+< count <+< produceFrom 0
 test3 = printer <+< sumTo 100000000 <+< count <+< count <+< count <+< produceFrom 0
 test4 = printer <+< sumTo 1000000000 <+< logger <+< produceFrom 0
 test5 = printer <+< take' 100 <+< expoPipe 10 <+< produceFrom 0
 test6 = blackhole <+< take' 1000 <+< expoPipe 13 <+< produceFrom 0
-main = handleIO test6
+test7 = blackhole <+< take' 1000 <+< expoPipe 14 <+< produceFrom 0
+main = handleIO (test4)
 
 -- test4: 21.8 seconds
 -- test6: 4.8 seconds
+-- test7: 12.5 seconds

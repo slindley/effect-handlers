@@ -29,6 +29,14 @@ produceFrom i =
     yield i
     produceFrom $! (i+1)
 
+produceFromTo :: (Monad m) => Int -> Int -> Producer Int m ()
+produceFromTo i j =
+  do
+    if i == j then return ()
+      else do yield i
+              (produceFromTo $! i+1) j
+
+
 count :: Monad m => Pipe i Int m a
 count =
   forever $ do
@@ -69,15 +77,18 @@ expoPipe n = expoPipe (n-1) <+< expoPipe (n-1)
 blackhole :: Monad m => Consumer a m b
 blackhole = forever await
 
+test0 n = blackhole <+< produceFromTo 1 n
 test1 = printer <+< sumTo 100000000 <+< count <+< produceFrom 0
 test2 = printer <+< sumTo 100000000 <+< count <+< count <+< produceFrom 0
 test3 = printer <+< sumTo 100000000 <+< count <+< count <+< count <+< produceFrom 0
 test4 = printer <+< sumTo 1000000000 <+< logger <+< produceFrom 0
 test5 = printer <+< take' 100 <+< expoPipe 10 <+< produceFrom 0
 test6 = blackhole <+< take' 1000 <+< expoPipe 13 <+< produceFrom 0
-main = runPipe test6
+test7 = blackhole <+< take' 1000 <+< expoPipe 14 <+< produceFrom 0
+main = runPipe (test7)
 
 
 -- test4: 23.5 seconds
 -- test6: 2.6 seconds
+-- test7: 6.4 seconds
 
