@@ -51,7 +51,7 @@ opSigs :: GenParser Char a [(String, [String])]
 opSigs = 
     do
       char '{'
-      sig <- opSig `sepBy1` char ','
+      sig <- opSig `sepBy` char ','
       char '}'
       return sig
 

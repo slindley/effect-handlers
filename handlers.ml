@@ -23,7 +23,7 @@ sig
 
   val (|->) : ('p,'r) op -> ('p -> ('r -> 'a) -> 'a) -> 'a clause
 
-  val mcbride : ('p,'r) op -> ('p -> ('r -> 'a) -> 'a) -> 'a clause
+  val shallow : ('p,'r) op -> ('p -> ('r -> 'a) -> 'a) -> 'a clause
   val local : ('p,'r) op -> ('p -> 'r) -> 'a clause
   val escape : ('p,'r) op -> ('p -> 'a) -> 'a clause
 
@@ -95,21 +95,21 @@ struct
       else
         None}
 
-  (* McBride clauses are implemented with control0 instead of shift0.
+  (* Shallow clauses are implemented with control0 instead of shift0.
      They correspond with Conor McBride's version of handlers in
-     Frank. The key difference between McBride clauses and standard
+     Frank. The key difference between shallow clauses and standard
      clauses is that the continuation is not automatically re-handled
-     by a McBride clause. This functionality can be used to implement
+     by a shallow clause. This functionality can be used to implement
      parameterised handlers. It can also be used to give
      implementations of prompt and prompt0 as handlers.
 
-     Our current implementation of McBride clauses seems to have a
+     Our current implementation of shallow clauses seems to have a
      severe memory leak.
 
-     Perhaps parameterised handlers are easier to implement more
-     efficiently and offer most of the benefits of McBride
+     Parameterised handlers are easier to implement more
+     efficiently and offer some of the benefits of shallow
      handlers. *)
-  let mcbride op body =
+  let shallow op body =
     {clause = fun prompt _effector op' ->
       if op == Obj.magic op' then
         Some (fun p ->
@@ -222,10 +222,10 @@ let fast_failure m =
     ([escape fail (fun () -> None)],
      fun x -> Some x)
 
-let rec mcbride_state s m =
+let rec shallow_state s m =
   handle m
     ([local   get (fun ()  -> s);
-      mcbride put (fun s k -> mcbride_state s k)],
+      shallow put (fun s k -> shallow_state s k)],
      fun x -> x)
 
 let stop = new_op ()
@@ -242,9 +242,9 @@ let rec count : unit -> unit = fun () ->
 
 let rec repeat n =
   if n = 0 then ()
-  else (let x = mcbride_state 42 get in repeat (n-1))
+  else (let x = shallow_state 42 get in repeat (n-1))
 
-(* let _ = mcbride_state 10000 count *)
+(* let _ = shallow_state 10000 count *)
 let _ = handle_state 1000000 count
 
 

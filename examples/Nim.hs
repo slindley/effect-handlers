@@ -14,6 +14,7 @@
 
 import Data.List
 import Handlers
+import TopLevel
 import DesugarHandlers
 
 -- Operations:
