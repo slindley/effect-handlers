@@ -6,7 +6,7 @@
 
 import Control.Monad
 
-import OpenHandlersMcBride
+import ShallowHandlers
 
 data Await = Await
 type instance Return Await = Int
@@ -87,61 +87,55 @@ newtype PutString = PutString String
 type instance Return PutString = ()
 putString s = doOp (PutString s)
 
-instance IOHandler a `Handles` PutString where
-  clause (PutString s) k h =
-    do
-      putStrLn s
-      iOHandler (k ())
-iOHandler comp = handle comp (\x _ -> return x) IOHandler 
 
-printer :: (h `Handles` PutString) => Consumer h r
-printer =
-  forever $ do
-    x <- await
-    putString (show x)
+-- printer :: (h `Handles` PutString) => Consumer h r
+-- printer =
+--   forever $ do
+--     x <- await
+--     putString (show x)
 
-pipeline :: (h `Handles` PutString) => Comp h ()
-pipeline = printer <+< take' 3 <+< fromList [1..]
+-- pipeline :: (h `Handles` PutString) => Comp h ()
+-- pipeline = printer <+< take' 3 <+< fromList [1..]
 
-produceFrom :: Int -> Producer h a
-produceFrom i =
-  do
-    yield i
-    produceFrom $! i+1
+-- produceFrom :: Int -> Producer h a
+-- produceFrom i =
+--   do
+--     yield i
+--     produceFrom $! i+1
 
     
-count :: Pipe h a
-count =
-  forever $ do
-    _ <- await
-    yield 1
+-- count :: Pipe h a
+-- count =
+--   forever $ do
+--     _ <- await
+--     yield 1
 
-sumTo :: Int -> Pipe h ()
-sumTo = sumTo' 0
-  where
-    sumTo' a limit =
-      if a >= limit then yield a
-      else
-        do
-          x <- await
-          sumTo' (x+a) limit
+-- sumTo :: Int -> Pipe h ()
+-- sumTo = sumTo' 0
+--   where
+--     sumTo' a limit =
+--       if a >= limit then yield a
+--       else
+--         do
+--           x <- await
+--           sumTo' (x+a) limit
 
-logger :: Pipe h a
-logger =
-  forever $ do
-    x <- await
-    yield (intLog 2 x)
+-- logger :: Pipe h a
+-- logger =
+--   forever $ do
+--     x <- await
+--     yield (intLog 2 x)
 
-intLog :: Int -> Int -> Int
-intLog b x = if x < b then 0
-             else divide (x `div` b^l) l
-               where
-                 l = 2 * intLog (b*b) x
-                 divide x l = if x < b then l
-                              else divide (x `div` b) (l+1)
+-- intLog :: Int -> Int -> Int
+-- intLog b x = if x < b then 0
+--              else divide (x `div` b^l) l
+--                where
+--                  l = 2 * intLog (b*b) x
+--                  divide x l = if x < b then l
+--                               else divide (x `div` b) (l+1)
 
-test1 = printer <+< sumTo 100000000 <+< count <+< produceFrom 0
-test2 = printer <+< sumTo 100000000 <+< count <+< count <+< produceFrom 0
-test3 = printer <+< sumTo 100000000 <+< count <+< count <+< count <+< produceFrom 0
-test4 = printer <+< sumTo 1000000000 <+< logger <+< produceFrom 0
-main = handleIO test1
+-- test1 = printer <+< sumTo 100000000 <+< count <+< produceFrom 0
+-- test2 = printer <+< sumTo 100000000 <+< count <+< count <+< produceFrom 0
+-- test3 = printer <+< sumTo 100000000 <+< count <+< count <+< count <+< produceFrom 0
+-- test4 = printer <+< sumTo 1000000000 <+< logger <+< produceFrom 0
+-- main = handleIO test1
