@@ -57,22 +57,34 @@ import DesugarHandlers
 |]
 
 [handler|
-  RandomHandler a :: IO a handles {Rand} where
+  HandleRandom a :: IO a handles {Rand} where
     Return x -> return x
     Rand   k -> do {r <- getStdRandom random; k r}
 |]
 
--- allResults (drunkCoins 3)
--- randomHandler ((maybeResult . randomResult) (drunkCoins 3))
--- let c = randomResult (drunkCoins 3) in randomHandler (persevere c c)
+-- allResults  (drunkTosses 3)
+-- sampleMaybe (drunkTosses 3)
+-- sample      (drunkTosses 3)
 
-data Outcome = Caught | Dropped
-data Toss    = Heads | Tails deriving Show
-drunkCoin = do {outcome <- choose Caught Dropped;
-                case outcome of
-                  Caught  -> choose Heads Tails
-                  Dropped -> failure}
-drunkCoins n = replicateM n drunkCoin
+
+type N a = forall h.([handles|h {Choose}|], [handles|h {Failure}|]) => Comp h a
+
+allResults  :: N a -> [a]
+sampleMaybe :: N a -> IO (Maybe a)
+sample      :: N a -> IO a
+
+sampleMaybe comp = (handleRandom . maybeResult . randomResult) comp
+sampleMaybe' comp = (handleRandom . randomResult . maybeResult) comp
+sample comp = handleRandom (persevere comp' comp')
+    where comp' = randomResult comp
+
+data Toss = Heads | Tails deriving Show
+drunkToss :: N Toss
+drunkToss = do {caught <- choose True False;
+                if caught then choose Heads Tails
+                else failure}
+drunkTosses :: Int -> N [Toss]
+drunkTosses n = replicateM n drunkToss
              
 
 
