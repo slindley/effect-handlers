@@ -1,16 +1,11 @@
-{- standard top level handlers -}
+{- Free top-level handlers -}
 
 {-# LANGUAGE TypeFamilies,
     MultiParamTypeClasses,
     GADTs,
     TypeOperators,
     RankNTypes,
-    FunctionalDependencies,
-    TypeSynonymInstances,
-    FlexibleInstances,
     FlexibleContexts,
-    ScopedTypeVariables,
-    PolyKinds,
     QuasiQuotes
   #-}
 

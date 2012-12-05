@@ -4,7 +4,7 @@
     don't match up with any of the declared operations are just
     ignored).
 
-  * McBride handlers?
+  * Shallow handlers?
 
   * Closure conversion? Perhaps not feasible using Template Haskell.
  -}
@@ -169,11 +169,17 @@ makeHandlesConstraint (h, sig) =
 handler = QuasiQuoter { quoteExp = undefined, quotePat = undefined,
                         quoteType = undefined, quoteDec = handlerParser}
 
-handlerParser :: String -> Q [Dec]
-handlerParser s = makeHandlerDef (parseHandlerDef s)
+shallowHandler = QuasiQuoter { quoteExp = undefined, quotePat = undefined,
+                               quoteType = undefined, quoteDec = shallowHandlerParser}
 
-makeHandlerDef :: HandlerDef -> Q [Dec]
-makeHandlerDef (h, name, ts, sig, r, cs) =
+handlerParser :: String -> Q [Dec]
+handlerParser s = makeHandlerDef False (parseHandlerDef s)
+
+shallowHandlerParser :: String -> Q [Dec]
+shallowHandlerParser s = makeHandlerDef True (parseHandlerDef s)
+
+makeHandlerDef :: Bool -> HandlerDef -> Q [Dec]
+makeHandlerDef shallow (h, name, ts, sig, r, cs) =
   do 
     let cname = mkName (let (c:cs) = name in toUpper(c) : cs)
         fname = mkName (let (c:cs) = name in toLower(c) : cs)
@@ -199,6 +205,9 @@ makeHandlerDef (h, name, ts, sig, r, cs) =
         resultInstance =
           TySynInstD (mkName "Result")
           [appType (ConT cname) (map VarT tyvars)] result
+        innerInstance =
+          TySynInstD (mkName "Inner")
+          [appType (ConT cname) (map VarT tyvars)] (VarT (last tyvars))
         
         CaseE _ cases = parseExp ("case undefined of\n" ++ cs)
         
@@ -262,11 +271,14 @@ makeHandlerDef (h, name, ts, sig, r, cs) =
                     let ps = [ConP op opArgs, VarP k', ConP cname handlerArgs]
                     v <- newName "v"
                     hs <- mapM (\_ -> newName "h") handlerArgs
-                    let wdecs' = (FunD
-                                  k
-                                  [Clause ([VarP v] ++ (map VarP hs))
-                                  (NormalB (appExp (VarE k') [VarE v, appExp (ConE cname) (map VarE hs)]))
-                                  []]) : wdecs
+                    let wdecs' =
+                          if shallow then wdecs
+                          else
+                            (FunD
+                             k
+                             [Clause ([VarP v] ++ (map VarP hs))
+                              (NormalB (appExp (VarE k') [VarE v, appExp (ConE cname) (map VarE hs)]))
+                              []]) : wdecs
                     return (Clause ps body wdecs')
         
                 split :: [Pat] -> ([Pat], Pat, [Pat])
@@ -326,15 +338,19 @@ makeHandlerDef (h, name, ts, sig, r, cs) =
             Nothing -> return []
             Just _  ->
               do
-                let plain = parseDecs "clause     op k h = doOp op     >>= (\\x -> k x h)"
+                let plain = parseDecs "clause op k h = doOp op >>= (\\x -> k x h)"
                 optype <- newName "optype"
                 return
                   [forwardInstance plainHandles [VarT optype] plain]
     
-    return ([handlerType, resultInstance] ++
-            opClauses ++ forwardClauses ++
-            [handlerFun])
-
+    return (if shallow then
+              [handlerType, resultInstance, innerInstance] ++
+              opClauses ++ forwardClauses ++
+              [handlerFun]
+            else
+              [handlerType, resultInstance] ++
+              opClauses ++ forwardClauses ++
+              [handlerFun])
 
 {- Operation definitions -}
 operation = QuasiQuoter { quoteExp = undefined, quotePat = undefined,

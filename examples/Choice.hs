@@ -15,13 +15,7 @@
 import Control.Monad
 import System.Random
 import Handlers
--- import TopLevel
 import DesugarHandlers
-
-[handler|
-  HandlePure a :: a handles {} where
-    Return x -> x
-|]
 
 [operation|forall a.Choose  :: a -> a -> a|]
 [operation|forall a.Failure :: a |]

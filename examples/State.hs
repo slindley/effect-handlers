@@ -197,7 +197,7 @@ countH =
 
 
 test5 = print (simpleState 100000000 countH)
-test6 = (handleIO . forwardState 10000000000) countH
+test6 = printHandler (forwardState 10000000000 countH)
 
 main = test5
 
