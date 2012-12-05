@@ -1,4 +1,4 @@
-{- Top-level handlers -}
+{- Codensity top-level handlers -}
 
 {-# LANGUAGE TypeFamilies,
     MultiParamTypeClasses,
@@ -9,9 +9,9 @@
     QuasiQuotes
   #-}
 
-module TopLevel where
+module CodensityTopLevel where
 
-import Handlers
+import CodensityHandlers
 import DesugarHandlers
 
 [handler|

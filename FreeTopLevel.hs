@@ -1,4 +1,4 @@
-{- Top-level handlers -}
+{- Free top-level handlers -}
 
 {-# LANGUAGE TypeFamilies,
     MultiParamTypeClasses,
@@ -9,9 +9,9 @@
     QuasiQuotes
   #-}
 
-module TopLevel where
+module FreeTopLevel where
 
-import Handlers
+import FreeHandlers
 import DesugarHandlers
 
 [handler|
