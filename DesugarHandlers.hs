@@ -4,8 +4,6 @@
     don't match up with any of the declared operations are just
     ignored).
 
-  * Shallow handlers?
-
   * Closure conversion? Perhaps not feasible using Template Haskell.
  -}
 
@@ -228,13 +226,13 @@ makeHandlerDef shallow (h, name, ts, sig, r, cs) =
             retCases -> retCases
                 
         makeArgType []  = TupleT 0
-        makeArgType [x] = VarT x
-        makeArgType xs  = PromotedTupleT n `appType` map VarT xs
+        makeArgType [x] = parseType x
+        makeArgType xs  = PromotedTupleT n `appType` map parseType xs
           where
             n = length xs
         
-        makeParentPredicate (opName, tvs) =
-            let opArgTypes = makeArgType (map mkName tvs) in
+        makeParentPredicate (opName, tys) =
+            let opArgTypes = makeArgType tys in
             ClassP plainHandles [VarT (head tyvars),
                                  ConT (mkName opName),
                                  opArgTypes]
@@ -250,9 +248,9 @@ makeHandlerDef shallow (h, name, ts, sig, r, cs) =
               Just s | ForallT [] rawCtx _ <- parseType (s ++ " => ()") -> rawCtx
 
         clauseInstance :: (String, [String]) -> Q Dec
-        clauseInstance (opName, tvs) =
+        clauseInstance (opName, tys) =
           do      
-            let opArgTypes = makeArgType (map mkName tvs)
+            let opArgTypes = makeArgType tys
                 handles =
                   ConT plainHandles `appType` [happ, ConT (mkName opName), opArgTypes]
                 

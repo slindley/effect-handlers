@@ -73,7 +73,8 @@ opSig =
       spaces
       name <- upperId
       spaces
-      ts <- tyVars
+      ts <- typeArgs
+      spaces
       return (name, ts)
 
 handlerdef :: GenParser Char a HandlerDef
@@ -156,6 +157,12 @@ forall =
       return us
 
 {- Utilities -}
+
+typeArgs :: GenParser Char a [String]
+typeArgs = typeArg `sepBy` spaces
+
+typeArg :: GenParser Char a String
+typeArg = tyVar <|> paren
       
 tyVars :: GenParser Char a [String]
 tyVars = many (do {x <- tyVar; spaces; return x})
