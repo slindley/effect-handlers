@@ -22,7 +22,7 @@ import DesugarHandlers
 
 -- Comp (Up h a) a           becomes  Prod (Cons r -> r)
 -- Int -> Comp (Down h a) a  becomes  Cons (Int -> Prod r -> r)
-
+ 
 [shallowHandler|
   forward h.Down s a :: Comp (Up h s a) a -> a
     handles {Await s} where
