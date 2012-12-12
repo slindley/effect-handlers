@@ -304,7 +304,7 @@ makeHandlerDef shallow (h, name, ts, sig, r, cs) =
               pre = [ClassP handles ([VarT (head tyvars), op] ++ extra)]
         
         ds = parseDecs cs
-    opClauses   <- mapM clauseInstance sig
+    opClauses <- mapM clauseInstance sig
 
     -- It's tempting to try to give handler functions signatures that abstract away
     -- from the handler type. But this doesn't appear to be feasible, as the
@@ -336,10 +336,28 @@ makeHandlerDef shallow (h, name, ts, sig, r, cs) =
             Nothing -> return []
             Just _  ->
               do
-                let plain = parseDecs "clause op k h = doOp op >>= (\\x -> k x h)"
+                forwardDecs <-
+                    if shallow then
+                        -- "clause op k (cname p q) = doOp op >>= (\x -> fname p q (k x)"
+                        do
+                          let op = mkName "op"
+                              bind = VarE (mkName ">>=")
+                              doOp = VarE (mkName "doOp")
+                              k = mkName "k"
+                              x = mkName "x"
+                          ps <- mapM (\_ -> newName "p") args
+                          return
+                            [FunD (mkName "clause")
+                                 [Clause [VarP op, VarP k, ConP cname (map VarP ps)]
+                                         (NormalB (appExp bind
+                                                 [AppE doOp (VarE op),
+                                                  LamE [VarP x]
+                                                  (appExp (VarE fname) (map VarE ps ++ [AppE (VarE k) (VarE x)]))])) []]]
+                    else
+                        return (parseDecs "clause op k h = doOp op >>= (\\x -> k x h)")
                 optype <- newName "optype"
                 return
-                  [forwardInstance plainHandles [VarT optype] plain]
+                  [forwardInstance plainHandles [VarT optype] forwardDecs]
     
     return (if shallow then
               [handlerType, resultInstance, innerInstance] ++
