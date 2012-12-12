@@ -8,7 +8,7 @@ module ShallowFreeHandlers where
 
 type family Return (opApp :: *) :: *
 type family Result (h :: *) :: *
-type family Inner h :: *     
+type family Inner h :: *
 
 class ((h :: *) `Handles` (op :: j -> k -> *)) (e :: j) | h op -> e where
   clause :: op e u -> (Return (op e u) -> Comp h (Inner h)) -> h -> Result h
