@@ -9,9 +9,6 @@ import Unsafe.Coerce
 
 import FunctorIx
 
--- GHC 7.4 doesn't allow polymorphic kind annotations
---class FunctorIx m => MonadIx m where
-
 class FunctorIx m => MonadIx (m :: (i -> *) -> (i -> *)) where
   returnIx :: a :-> m a
   extendIx :: (a :-> m b) -> (m a :-> m b)
