@@ -1,4 +1,4 @@
-{- Handlers for indexed types using a continuation monad -}
+{- Handler for indexed types using a free monad -}
 
 {-# LANGUAGE
     GADTs,
@@ -10,7 +10,7 @@
     PolyKinds, DataKinds, RankNTypes, ScopedTypeVariables
   #-}
 
-module HandlerIx where
+module FreeHandlerIx where
 
 import Control.Exception (catch, IOException)
 import System.IO
@@ -19,25 +19,31 @@ import FunctorIx
 import MonadIx
 
 type family Return (op :: k -> *) :: k -> *
-type family Result (h :: k -> *)  :: k -> *
+type family Result (h ::  k -> *) :: k -> *
 
 class (((h :: k -> *) `Handles` (op :: k -> *))) where
   clause :: op pre -> (forall i.Return op i -> h i -> Result h i) -> h pre -> Result h pre
 
-newtype Comp (h :: k -> *) (a :: (k -> *)) (pre :: k) = 
-  Comp {handle :: (forall i.(a i -> h i -> Result h i)) -> h pre -> Result h pre}           
-  
+data Comp (h :: k -> *) (a :: (k -> *)) :: (k -> *) where
+  Ret :: a pre -> Comp h a pre
+  Do  :: (h `Handles` op) => op pre -> (Return op :-> Comp h a) -> Comp h a pre
+
 instance MonadIx (Comp h) where
-  returnIx v          = Comp (\k h -> k v h)
-  extendIx f (Comp c) = Comp (\k h -> c (\x h' -> handle (f x) k h') h)
+  returnIx             = Ret
+  extendIx f (Ret v)   = f v
+  extendIx f (Do op k) = Do op (\x -> k x ?>= f)
 instance FunctorIx (Comp h) where
-  mapIx f c = c ?>= (\x -> returnIx (f x))
+  mapIx f c = c ?>= (returnIx . f)
 instance ApplicativeP (Comp h) where
   pure      = returnP
   mf |*| ms = mf =>= \f -> ms =>= \s -> returnP (f s)
 
 doOp :: (h `Handles` op) => op post -> Comp h (Return op) post
-doOp op = Comp (\k h -> clause op k h)
+doOp op = Do op returnIx
+
+handle :: Comp h a pre -> (forall i.(a i -> h i -> Result h i)) -> h pre -> Result h pre
+handle (Ret x) r h   = r x h
+handle (Do op k) r h = clause op (\v h' -> handle (k v) r h') h
 
 -- Example from Kleisli arrows of outrageous fortune
 data FileState :: * where
@@ -64,7 +70,7 @@ fClose :: (h `Handles` FClose) => Comp h (() := 'Closed) 'Open
 fClose = doOp (FClose (V ()))
 
 fileContents :: (h `Handles` FOpen, h `Handles` FGetC, h `Handles` FClose) =>
-                String -> Comp h (Maybe String := 'Closed) 'Closed
+                  String -> Comp h (Maybe String := 'Closed) 'Closed
 fileContents p = fOpen p ?>= \b -> case b of
   SClosed -> pure Nothing
   SOpen   -> pure (\s _ -> Just s) |*| readOpenFile |*| fClose
