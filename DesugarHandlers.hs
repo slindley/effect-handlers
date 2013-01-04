@@ -155,11 +155,11 @@ makeHandlesConstraint (h, sig) =
                   where
                     t = case args of
                           []    -> TupleT 0
-                          [arg] -> VarT (mkName arg)
+                          [arg] -> parseType arg
                           _     -> typeList args
                     typeList args =
                         t `appType` (ts ++ [PromotedNilT])
-                        where (t:ts) = map (\arg -> AppT PromotedConsT (VarT (mkName arg))) args
+                        where (t:ts) = map (\arg -> AppT PromotedConsT (parseType arg)) args
       return (TupleT (length sig) `appType` map constraint sig)
 
 
