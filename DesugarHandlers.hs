@@ -156,12 +156,14 @@ makeHandlesConstraint (h, sig) =
                     t = case args of
                           []    -> TupleT 0
                           [arg] -> parseType arg
-                          _     -> typeList args
-                    typeList args =
-                        t `appType` (ts ++ [PromotedNilT])
-                        where (t:ts) = map (\arg -> AppT PromotedConsT (parseType arg)) args
+                          _     -> PromotedTupleT (length args) `appType` map parseType args
+--typeList args
+                   -- typeList []         = PromotedNilT
+                   --  typeList (arg:args) = PromotedConsT `appType` [parseType arg, typeList args]
+                    -- typeList args =
+                    --     t `appType` (ts ++ [PromotedNilT])
+                    --     where (t:ts) = map (\arg -> AppT PromotedConsT (parseType arg)) args
       return (TupleT (length sig) `appType` map constraint sig)
-
 
 {- Handler definitions -}
 handler = QuasiQuoter { quoteExp = undefined, quotePat = undefined,
