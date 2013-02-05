@@ -4,9 +4,6 @@
    Based on the paper 'Accumulating bindings' by Sam Lindley:
 
      http://homepages.inf.ed.ac.uk/slindley/papers/nbe-sums.pdf
-   
-   TODO: use typed HOAS as in the above paper (should be completely
-   straightforward)
 -}
 
 {-# LANGUAGE TypeFamilies,
@@ -52,59 +49,100 @@ instance Show Exp where
                   x2 ++ " -> (" ++ show e2 ++ ")"
     show (Let x e e') = "let " ++ x ++ " = (" ++ show e ++ ") in " ++ "(" ++ show e' ++ ")"
 
--- HOAS
-class CompLam exp where
-  lam :: (exp -> exp) -> exp
-  app :: exp -> exp -> exp
-  inl :: exp -> exp
-  inr :: exp -> exp
-  case_ :: exp -> (exp -> exp) -> (exp -> exp) -> exp
-  let_ :: exp -> (exp -> exp) -> exp
-
--- the type of closed HOAS terms
-type Hoas = forall exp . CompLam exp => exp
-
--- convert a closed HOAS term to the
--- corresponding FOAS term
-hoasToExp :: Hoas -> Exp
-hoasToExp v = handlePure (evalNames (unGen v))
 
 [operation|NextName :: String|]
 
-type GenComp h a = ([handles|h {NextName}|]) => Comp h a
-newtype Gen a = Gen {unGen :: forall h.GenComp h a}
-
-instance CompLam (Gen Exp) where
-    lam f = Gen$ do x <- nextName
-                    e <- unGen$ f (Gen$ return (Var x))
-                    return (Lam x e)
-    v1 `app` v2 = Gen$ do e1 <- unGen$ v1
-                          e2 <- unGen$ v2
-                          return (App e1 e2)
-    inl v = Gen$ do e <- unGen$ v
-                    return (Inl e)
-    inr v = Gen$ do e <- unGen$ v
-                    return (Inr e)
-    case_ v l r = Gen$ do e <- unGen$ v
-                          x1 <- nextName
-                          x2 <- nextName
-                          e1 <- unGen$ l (Gen$ return (Var x1))
-                          e2 <- unGen$ r (Gen$ return (Var x2))
-                          return (Case e x1 e1 x2 e2)
-    let_ v f = Gen$ do e <- unGen$ v
-                       x <- nextName
-                       e' <- unGen$ f (Gen$ return (Var x))
-                       return (Let x e e')
+type NamesComp a = ([handles|h {NextName}|]) => Comp h a
 
 infixl 9 :+:
 infixr 5 :->
 
--- Types
-data Type :: * where
-  Base :: Type
-  (:->) :: Type -> Type -> Type
-  (:+:) :: Type -> Type -> Type
-  deriving Show
+-- We build up simple types from: abstract base types (A,B,C), the
+-- function type constructor (->), and the sum type constructor (Either).
+
+-- some abstract base types
+data A
+data B
+data C
+
+-- syntactic sugar for sums
+type a :+: b = Either a b
+
+-- a GADT of simple type representations
+data Rep :: * -> * where
+     A :: Rep A
+     B :: Rep B
+     C :: Rep C
+     (:->) :: Rep a -> Rep b -> Rep (a->b)
+     (:+:) :: Rep a -> Rep b -> Rep (a:+:b)
+
+instance Show (Rep a) where
+    show A = "A"
+    show B = "B"
+    show C = "C"
+    show (r1 :-> r2) = "(" ++ show r1 ++ "->" ++ show r2 ++ ")"
+    show (r1 :+: r2) = "(" ++ show r1 ++ ":+:" ++ show r2 ++ ")"
+
+-- The Representable type class allows us to smoothly bridge the gap between
+-- metalanguage types and object language type representations.
+--
+-- Note that this type class is closed by construction, as the Rep GADT
+-- only admits simple type representations.
+class Representable a where
+    rep :: Rep a
+
+instance Representable A where rep = A
+instance Representable B where rep = B
+instance Representable C where rep = C
+
+instance (Representable a, Representable b) => Representable (a->b) where
+    rep = rep :-> rep
+
+instance (Representable a, Representable b) => Representable (a:+:b) where
+    rep = rep :+: rep
+
+-- Typed HOAS
+class CompLam exp where
+  lam :: (Representable a, Representable b) => (exp a -> exp b) -> exp (a->b)
+  app :: (Representable a, Representable b) => exp (a->b) -> exp a -> exp b
+  inl :: (Representable a, Representable b) => exp a -> exp (a:+:b)
+  inr :: (Representable a, Representable b) => exp b -> exp (a:+:b)
+  case_ :: (Representable a, Representable b, Representable c) =>
+            exp (a:+:b) -> (exp a -> exp c) -> (exp b -> exp c) -> exp c
+  let_ :: (Representable a, Representable b) => exp a -> (exp a -> exp b) -> exp b
+
+-- the type of closed HOAS terms of type a
+type Hoas a = forall (exp :: * -> *). CompLam exp => exp a
+
+-- convert a typed closed HOAS term to the
+-- corresponding FOAS term
+hoasToExp :: Hoas a -> Exp
+hoasToExp v = handlePure (evalNames (unT v))
+
+-- expressions with names and a phantom type attached
+newtype T a = T {unT :: NamesComp Exp}
+
+instance CompLam T where
+    lam f = T$ do x <- nextName
+                  e <- unT$ f (T$ return (Var x))
+                  return (Lam x e)
+    v1 `app` v2 = T$ do e1 <- unT v1
+                        e2 <- unT v2
+                        return (App e1 e2)
+    inl v = T$ do e <- unT v
+                  return (Inl e)
+    inr v = T$ do e <- unT v
+                  return (Inr e)
+    case_ v l r = T$ do e <- unT v
+                        x1 <- nextName
+                        x2 <- nextName
+                        e1 <- unT$ l (T$ return (Var x1))
+                        e2 <- unT$ r (T$ return (Var x2))
+                        return (Case e x1 e1 x2 e2)
+    let_ v f = T$ do e <- unT v
+                     x <- nextName
+                     e' <- unT$ f (T$ return (Var x))
+                     return (Let x e e')
 
 --- environments
 type Env a = [(String, a)]
@@ -193,11 +231,11 @@ caseB' e x1 e1 x2 e2 = do b <- caseB e x1 x2;
   forward h.
     Flatten :: Exp
       handles {LetB, CaseB} where
-        Return x         -> return x
-        LetB x e       k ->
+        Return x          -> return x
+        LetB x e        k ->
           do e' <- k ()
              return (Let x e e')
-        CaseB e x1 x2  k ->
+        CaseB e x1 x2   k ->
           do e1 <- k True
              e2 <- k False
              return (Case e x1 e1 x2 e2)
@@ -209,27 +247,29 @@ caseB' e x1 e1 x2 e2 = do b <- caseB e x1 x2;
 data SemV = Neutral Exp | Fun (SemV -> SemC) | Sum (Either SemV SemV)
 type SemC = ResComp SemV
 
--- This function generates an abstract computation for performing
+-- this function generates an abstract computation for performing
 -- normalisation by evaluation.
-abstractNorm :: Type -> Hoas -> ResComp Exp
+abstractNorm :: Rep a -> Hoas a -> ResComp Exp
 abstractNorm a e = reifyC a (eval empty (hoasToExp e))
 
-normCont :: Type -> Hoas -> Exp
+normCont :: Rep a -> Hoas a -> Exp
 normCont a e = handlePure (evalNames (resCont (abstractNorm a e)))
 
-normAcc :: Type -> Hoas -> Exp
+normAcc :: Rep a -> Hoas a-> Exp
 normAcc a e = handlePure (evalNames (flatten (resAcc (abstractNorm a e))))
 
-test1 = normCont ((Base :+: (Base :-> Base)) :-> (Base :+: (Base :-> Base))) (lam id)
-test2 = normAcc ((Base :+: (Base :-> Base)) :-> (Base :+: (Base :-> Base))) (lam id)
+test1 = normCont ((A :+: (B :-> C)) :-> (A :+: (B :-> C))) (lam id)
+test2 = normAcc ((A :+: (B :-> C)) :-> (A :+: (B :-> C))) (lam id)
 
 -- reify a computation
-reifyC :: Type -> SemC -> ResComp Exp
+reifyC :: Rep a -> SemC -> ResComp Exp
 reifyC a c = collect (do v <- c; reifyV a v)
 
 -- reify a value
-reifyV :: Type -> SemV -> ResComp Exp
-reifyV Base (Neutral e) = return e
+reifyV :: Rep a -> SemV -> ResComp Exp
+reifyV A (Neutral e) = return e
+reifyV B (Neutral e) = return e
+reifyV C (Neutral e) = return e
 reifyV (a :-> b) (Fun f) =
     do x <- nextName
        e <- reifyC b (do v <- reflectV a x; f v)
@@ -242,14 +282,16 @@ reifyV (a :+: b) (Sum (Right v)) =
        return (Inr e)
 
 -- reflect a neutral computation expression (i.e. application) as a computation
-reflectC :: Type -> String -> Exp -> SemC
+reflectC :: Rep a -> String -> Exp -> SemC
 reflectC a x e =
     do x <- bind (App (Var x) e)
        reflectV a x   
 
 -- reflect a neutral value expression (i.e. variable) as a computation
-reflectV :: Type -> String -> SemC
-reflectV Base x = return (Neutral (Var x))
+reflectV :: Rep a -> String -> SemC
+reflectV A x = return (Neutral (Var x))
+reflectV B x = return (Neutral (Var x))
+reflectV C x = return (Neutral (Var x))
 reflectV (a :-> b) x =
     return (Fun (\v -> do e <- reifyV a v; reflectC b x e))
 reflectV (a :+: b) x =
