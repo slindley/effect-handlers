@@ -4,13 +4,11 @@
    Based on the paper 'Accumulating bindings' by Sam Lindley:
 
      http://homepages.inf.ed.ac.uk/slindley/papers/nbe-sums.pdf
-
-   This version uses handlers pervasively, including in the evaluator,
-   which presents some interesting issues.
 -}
 
 {-# LANGUAGE TypeFamilies,
     GADTs,
+    NoMonomorphismRestriction,
     RankNTypes,
     MultiParamTypeClasses,
     QuasiQuotes,
@@ -20,8 +18,6 @@
     UndecidableInstances,
     ConstraintKinds,
     TypeOperators,
-    DataKinds,
-    PolyKinds,
     ScopedTypeVariables #-}
 
 import Handlers
@@ -29,8 +25,6 @@ import TopLevel
 import DesugarHandlers
 
 import Data.Maybe
-
-import Unsafe.Coerce
 
 type Var = String
 
@@ -42,7 +36,6 @@ data Exp = Var Var
          | Inr Exp
          | Case Exp Var Exp Var Exp
          | Let Var Exp Exp
-  deriving Eq
 
 instance Show Exp where
     show (Var x) = x
@@ -151,27 +144,27 @@ instance CompLam T where
                      e' <- unT$ f (T$ return (Var x))
                      return (Let x e e')
 
-[operation|Bind  :: Exp -> String|]
-[operation|Binds :: Exp -> Either String String|]
+--- environments
+type Env a = [(String, a)]
+
+empty :: Env a
+empty = []
+
+extend :: [(String, a)] -> String -> a -> [(String, a)]
+extend env x v = (x, v):env
+
+[operation|Bind    :: Exp -> String|]
+[operation|Binds   :: Exp -> Either String String|]
 
 -- One might think that Collect should be a handler, but it's
 -- convenient to make it an operation so we can abstract over it in
 -- the same way as Bind and Binds.
---
--- Collect can in fact be seen as a rather generic operation for
--- delimiting a chunk of computation. It is also used by the
--- aspect-oriented programming example, where it is called Suspend.
---
--- In our current implementation, Collect typically leads to
--- boilerplate for each handler as we need to recursively invoke the
--- handler on the argument.
-[operation|Collect h a :: Comp h a -> a|]
+[operation|Collect :: ResComp Exp -> Exp|]
 
--- interface to residualising computations
-type ResConstraints h =
-  ([handles|h {NextName}|],
-   [handles|h {Bind}|], [handles|h {Binds}|],
-   [handles|h {Collect h (Exp)}|])
+-- the type of an abstract residualising computation
+type ResComp a = ([handles|h {NextName}|],
+                  [handles|h {Bind}|], [handles|h {Binds}|],
+                  [handles|h {Collect}|]) => Comp h a
 
 -- The canonical continuation-based interpretation of residualising
 -- computations.
@@ -182,7 +175,7 @@ type ResConstraints h =
 [handler|
   forward h handles {NextName}.
     ResCont :: Exp
-      handles {Bind, Binds, Collect (ResCont h) (Exp)} where
+      handles {Bind, Binds, Collect} where
         Return x     -> return x
         Bind e     k ->
           do x <- nextName
@@ -199,6 +192,7 @@ type ResConstraints h =
              k e
 |] 
 
+
 -- We now give some approximation to an accumulation-based
 -- residualising interpretation.
 --
@@ -214,9 +208,9 @@ caseB' e x1 e1 x2 e2 = do b <- caseB e x1 x2;
 -- As we encode the binding tree structure using operations, the
 -- return type of the handler is again just Exp.
 [handler|
-  forward h handles {NextName, LetB, CaseB, Collect h (Exp)}.
+  forward h handles {NextName, LetB, CaseB}.
     ResAcc :: Exp
-      handles {Bind, Binds, Collect (ResAcc h) (Exp)} where
+      handles {Bind, Binds, Collect} where
         Return x     -> return x
         Bind e     k ->
           do x <- nextName
@@ -226,7 +220,7 @@ caseB' e x1 e1 x2 e2 = do b <- caseB e x1 x2;
              x2 <- nextName
              caseB' e x1 (k (Left x1)) x2 (k (Right x2))
         Collect c  k ->
-          do e <- collect (resAcc c)
+          do e <- flatten (resAcc c)
              k e
 |] 
 
@@ -235,7 +229,7 @@ caseB' e x1 e1 x2 e2 = do b <- caseB e x1 x2;
 [handler|
   forward h.
     Flatten :: Exp
-      handles {LetB, CaseB, Collect (Flatten h) (Exp)} where
+      handles {LetB, CaseB} where
         Return x          -> return x
         LetB x e        k ->
           do e' <- k ()
@@ -244,37 +238,34 @@ caseB' e x1 e1 x2 e2 = do b <- caseB e x1 x2;
           do e1 <- k True
              e2 <- k False
              return (Case e x1 e1 x2 e2)
-        Collect c       k ->
-          do e <- flatten c
-             k e
 |]
 
 --- semantics
 
 -- values and computations
-data SemV h = Neutral Exp | Fun (SemV h -> SemC h) | Sum (SemV h :+: SemV h)
-type SemC h = Comp h (SemV h)
+data SemV = Neutral Exp | Fun (SemV -> SemC) | Sum (Either SemV SemV)
+type SemC = ResComp SemV
 
 -- this function generates an abstract computation for performing
 -- normalisation by evaluation.
-abstractNorm :: (ResConstraints h, EvalConstraints h) => Rep a -> Hoas a -> Comp h Exp
-abstractNorm a e = reifyC a (eval (hoasToExp e))
+abstractNorm :: Rep a -> Hoas a -> ResComp Exp
+abstractNorm a e = reifyC a (eval empty (hoasToExp e))
 
 normCont :: Rep a -> Hoas a -> Exp
-normCont a e = handlePure (evalNames (undefinedFailure (resCont (listEnv [] (abstractNorm a e)))))
+normCont a e = handlePure (evalNames (resCont (abstractNorm a e)))
 
-normAcc :: Rep a -> Hoas a -> Exp
-normAcc a e = handlePure (evalNames (undefinedFailure (flatten (resAcc (listEnv [] (abstractNorm a e))))))
-  
+normAcc :: Rep a -> Hoas a-> Exp
+normAcc a e = handlePure (evalNames (flatten (resAcc (abstractNorm a e))))
+
 test1 = normCont ((A :+: (B :-> C)) :-> (A :+: (B :-> C))) (lam id)
-test2 = normAcc  ((A :+: (B :-> C)) :-> (A :+: (B :-> C))) (lam id)
+test2 = normAcc ((A :+: (B :-> C)) :-> (A :+: (B :-> C))) (lam id)
 
 -- reify a computation
-reifyC :: ResConstraints h => Rep a -> SemC h -> Comp h Exp
+reifyC :: Rep a -> SemC -> ResComp Exp
 reifyC a c = collect (do v <- c; reifyV a v)
 
 -- reify a value
-reifyV :: ResConstraints h => Rep a -> SemV h -> Comp h Exp
+reifyV :: Rep a -> SemV -> ResComp Exp
 reifyV A (Neutral e) = return e
 reifyV B (Neutral e) = return e
 reifyV C (Neutral e) = return e
@@ -289,15 +280,14 @@ reifyV (a :+: b) (Sum (Right v)) =
     do e <- reifyV b v
        return (Inr e)
 
--- reflect a neutral computation expression (i.e. application) as a
--- computation
-reflectC :: ResConstraints h => Rep a -> String -> Exp -> SemC h
+-- reflect a neutral computation expression (i.e. application) as a computation
+reflectC :: Rep a -> String -> Exp -> SemC
 reflectC a x e =
     do x <- bind (App (Var x) e)
        reflectV a x   
 
 -- reflect a neutral value expression (i.e. variable) as a computation
-reflectV :: ResConstraints h => Rep a -> String -> SemC h
+reflectV :: Rep a -> String -> SemC
 reflectV A x = return (Neutral (Var x))
 reflectV B x = return (Neutral (Var x))
 reflectV C x = return (Neutral (Var x))
@@ -313,103 +303,35 @@ reflectV (a :+: b) x =
              do v2 <- reflectV b x2
                 return (Sum (Right v2))
 
--- environments
-[operation|Find k v   :: k -> v|]
-[operation|Extend k v :: k -> v -> ()|]
-
-type EnvConstraints h k v = ([handles|h {Find k v}|], [handles|h {Extend k v}|])
-
--- non-recursive list environment
---
--- [handler|
---   forward h handles {Failure}.
---     ListEnv v a :: [(String, v)] -> a handles {Find (String) v, Extend (String) v} where
---       Return x     env -> return x
---       Find x     k env -> case lookup x env of
---                             Nothing -> failure
---                             Just v  -> k v env
---       Extend x v k env -> k () ((x,v) : env)
--- |]
-
--- recursive list environment
---
--- [handler|
---   forward h handles {Failure}.
---     ListEnv a :: [(String, SemV (ListEnv h a))] -> a
---       handles {Find (String) (SemV (ListEnv h a)), Extend (String) (SemV (ListEnv h a))} where
---         Return x     env -> return x
---         Find x     k env -> case lookup x env of
---                               Nothing -> failure
---                               Just v  -> k v env
---         Extend x v k env -> k () ((x,v) : env)
--- |]
-
--- recursive list environment that recursively handles Collect
--- operations
-[handler|
-  forward h handles {Failure, Collect h a}.
-    ListEnv a :: [(String, SemV (ListEnv h a))] -> a
-      handles {Find   (String) (SemV (ListEnv h a)),
-               Extend (String) (SemV (ListEnv h a)),
-               Collect (ListEnv h a) a} where
-        Return x     env -> return x
-        Find x     k env -> case lookup x env of
-                              Nothing -> failure
-                              Just v  -> k v env
-        Extend x v k env -> k () ((x,v) : env)
-        Collect c  k env -> do e <- collect (listEnv env c)
-                               k e env
-|]
-
---- If we're not carefuly then any effects in eval screw things up
---- because they leak into the environment, which persists.
----
---- We solve this problem by:
----
----   * being careful to define an explicitly recursive type
----   for an environment handler
----
----   * ensuring that we handle the eval effects at a type not
----   involving the effects, i.e., Exp.
-
-type EvalConstraints h = EnvConstraints h String (SemV h)
-
---- An effectful evaluator that abstracts over the implementation of
---- environments
-eval :: EvalConstraints h => Exp -> SemC h
-eval (Var x) = find x
-eval (Lam x e) =
-  return (Fun (\v ->
-                do extend x v
-                   eval e))
-eval (App e1 e2) =
+--- An evaluator
+eval :: Env SemV -> Exp -> ResComp SemV
+eval env (Var x) =
+  return (fromJust (lookup x env))
+eval env (Lam x e) =
+  return (Fun (\v -> eval (extend env x v) e))
+eval env (App e1 e2) =
     do
-      (Fun v1) <- eval e1
-      v2 <- eval e2
+      (Fun v1) <- eval env e1
+      v2       <- eval env e2
       v1 v2
-eval (Let x e1 e2) =
+eval env (Let x e1 e2) =
     do 
-      v <- eval e1
-      extend x v
-      eval e2
-eval (Inl e) =
+      v <- eval env e1
+      eval (extend env x v) e2
+eval env (Inl e) =
     do
-      v <- eval e
+      v <- eval env e
       return (Sum (Left v))
-eval (Inr e) =
+eval env (Inr e) =
     do
-      v <- eval e
+      v <- eval env e
       return (Sum (Right v))
-eval (Case e x1 e1 x2 e2) =
+eval env (Case e x1 e1 x2 e2) =
     do
-      (Sum s) <- eval e
+      (Sum s) <- eval env e
       case s of
-        Left v  ->
-          do extend x1 v
-             eval e1
-        Right v ->
-          do extend x2 v
-             eval e2
+        Left v  -> eval (extend env x1 v) e1
+        Right v -> eval (extend env x2 v) e2
 
 -- interpret nextName using get and put
 evalNames = evalState 0 . stateNames
@@ -431,13 +353,4 @@ evalNames = evalState 0 . stateNames
         Return  x     _ -> return x
         Get        k  s -> k s  s
         Put     s  k  _ -> k () s
-|]
-
--- failure
-[operation|forall a.Failure :: a|]
-[handler|
-  forward h.
-    UndefinedFailure a :: a handles {Failure} where
-      Return x   -> return x
-      Failure  k -> undefined    
 |]
