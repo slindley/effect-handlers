@@ -16,6 +16,9 @@
 import Handlers
 import TopLevel
 import DesugarHandlers
+import System.IO
+import Control.Monad
+import Network
 
 type RequestType = String
 type URL = String
@@ -100,3 +103,39 @@ getFirstLine = do method <- getUntil ' '
         PeekC    k (Just c) -> k c (Just c)
 |]
 handlePeek' comp = handlePeek Nothing comp
+
+-- A simple handler for Web Application Output
+-- Not efficient and cannot handle any header.
+
+[handler| 
+     DirectOutput a :: Handle -> IO a
+     handles {Emit} where                 
+        Return x s -> do {hFlush s; hClose s; return x} 
+        Emit c k s -> do {hPutStr s c; k () s}
+|]
+
+
+headerOk = "HTTP/1.0 200 OK\r\n"
+-- Build a list of string and of headers
+-- not very efficient.
+[handler| 
+      BufferStringOutput a :: [String] -> [(String,String)]-> Handle -> IO a
+      handles {Emit} where
+         Return x ss hs h ->  
+                   do
+                   hPutStr h headerOk
+                   forM_  hs 
+                         (\ (k,v) -> do 
+                                     hPutStr h k
+                                     hPutStr h ": "
+                                     hPutStr h v
+                                     hPutStr h "\r\n")
+                   hPutStr h "\r\n" 
+                   forM_  (reverse ss) (\s -> hPutStr h s)
+                   return x
+         Emit s k ss hs h -> k () (s:ss) hs h
+         EmitHeader key val k ss hs h ->
+                k () ss ((key,val):hs) h
+                
+|]
+
