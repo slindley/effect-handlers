@@ -214,9 +214,9 @@ caseB' e x1 e1 x2 e2 = do b <- caseB e x1 x2;
 -- As we encode the binding tree structure using operations, the
 -- return type of the handler is again just Exp.
 [handler|
-  forward h handles {NextName, LetB, CaseB, Collect h (Exp)}.
-    ResAcc :: Exp
-      handles {Bind, Binds, Collect (ResAcc h) (Exp)} where
+  forward h handles {NextName, LetB, CaseB, Collect h a}.
+    ResAcc a :: a
+      handles {Bind, Binds, Collect (ResAcc h a) a} where
         Return x     -> return x
         Bind e     k ->
           do x <- nextName
@@ -361,7 +361,7 @@ type EnvConstraints h k v = ([handles|h {Find k v}|], [handles|h {Extend k v}|])
                                k e env
 |]
 
---- If we're not carefuly then any effects in eval screw things up
+--- If we're not carefull then any effects in eval screw things up
 --- because they leak into the environment, which persists.
 ---
 --- We solve this problem by:
