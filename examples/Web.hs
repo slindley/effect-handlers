@@ -19,32 +19,57 @@ import DesugarHandlers
 import System.IO
 import Control.Monad
 import Network
+import Control.Concurrent
 
 type RequestType = String
 type URL = String
 
-[operation|AcceptConnection a :: Servlet a -> ()|]
+-- [operation|Collect h a :: Comp h a -> a|]
+-- reifyHandler :: Comp h h
+--[operation|AcceptConnection a :: Servlet a -> ()|]
+--[operation|TerminateHeader a :: ServletBody a -> a|]
 
-[operation|         EmitHeader      :: String -> String -> ()|]
-[operation|forall a.TerminateHeader :: ServletBody a -> a|]
-
+[operation|EmitHeader      :: String -> String -> ()|]
 [operation|Emit            :: String ->           ()|]
 
 [operation|GetRequestType  :: RequestType|]
 [operation|GetURL          :: URL|]
 [operation|GetValueOf      :: String -> Maybe String|]
 
-type HeaderConstraints  h = ([handles|h {EmitHeader}|], [handles|h {TerminateHeader}|])
+type HeaderConstraints  h = ([handles|h {EmitHeader}|]) -- , [handles|h {TerminateHeader}|])
 type BodyConstraints    h = ([handles|h {Emit}|])
-type RequestConstraints h = ([handles|h {GetRequestType}|], [handles|h {GetURL}|], [handles|h {GetValueOf}|])
+--type RequestConstraints h = ([handles|h {GetRequestType}|], [handles|h {GetURL}|], [handles|h {GetValueOf}|])
 
-type Servlet a = (HeaderConstraints h, BodyConstraints h, RequestConstraints h) => Comp h a
-type ServletBody a = (BodyConstraints h, RequestConstraints h) => Comp h a
+-- type Servlet a = (HeaderConstraints h, BodyConstraints h, RequestConstraints h) => Comp h a
+-- type ServletBody a = (BodyConstraints h, RequestConstraints h) => Comp h a
+type Servlet a = (HeaderConstraints h, BodyConstraints h) => Comp h a
+--type ServletBody a = (BodyConstraints h) => Comp h a
 
-server :: ([handles|h {AcceptConnection a}|]) => Servlet a -> Comp h ()
-server p = 
-  do acceptConnection p;
-     server p
+type ServletHandler = (HeaderConstraints h, BodyConstraints h) => h
+
+-- server :: ([handles|h {AcceptConnection a}|]) => Servlet a -> Comp h ()
+-- server p = 
+--   do acceptConnection p;
+--      server p
+
+server :: PortNumber -> (Handle -> Comp h a ->  IO ()) -> Comp h a -> IO ()
+server p h servlet = withSocketsDo $ do
+    sock <- listenOn $ PortNumber p
+    loop sock
+    where
+      loop sock = do
+        (ha,_,_) <- accept sock
+        forkIO $ (h ha servlet)
+        loop sock
+        -- where
+        --   body h = do
+        --     hPutStr h msg
+        --     hFlush h
+        --     hClose h
+         
+main =  
+  server 5002 (\ha servlet -> bufferStringOutput [] [] ha servlet) pong
+
 
 
 -- parsing HTTP headers
@@ -120,7 +145,7 @@ headerOk = "HTTP/1.0 200 OK\r\n"
 -- not very efficient.
 [handler| 
       BufferStringOutput a :: [String] -> [(String,String)]-> Handle -> IO a
-      handles {Emit} where
+      handles {Emit, EmitHeader} where
          Return x ss hs h ->  
                    do
                    hPutStr h headerOk
@@ -131,11 +156,34 @@ headerOk = "HTTP/1.0 200 OK\r\n"
                                      hPutStr h v
                                      hPutStr h "\r\n")
                    hPutStr h "\r\n" 
-                   forM_  (reverse ss) (\s -> hPutStr h s)
+                   forM_  (reverse ss) (\s -> hPutStr h s) 
+                   hPutStr h "\r\n"
+                   hFlush h;
+                   hClose h;
                    return x
          Emit s k ss hs h -> k () (s:ss) hs h
          EmitHeader key val k ss hs h ->
                 k () ss ((key,val):hs) h
-                
 |]
 
+pong :: ([handles|h {Emit}|]) => Comp h ()
+pong = emit "Pong!"
+
+
+-- a very basic webserver
+--
+-- main = withSocketsDo $ do
+--     sock <- listenOn $ PortNumber 5002
+--     loop sock
+ 
+-- loop sock = do
+--    (h,_,_) <- accept sock
+--    forkIO $ body h
+--    loop sock
+--   where
+--    body h = do
+--        hPutStr h msg
+--        hFlush h
+--        hClose h
+ 
+-- msg = "HTTP/1.0 200 OK\r\nContent-Length: 5\r\n\r\nPong!\r\n"
