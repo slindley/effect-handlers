@@ -1,7 +1,7 @@
 {-# LANGUAGE TypeFamilies, GADTs, NoMonomorphismRestriction, RankNTypes,
     MultiParamTypeClasses, FlexibleInstances, OverlappingInstances,
     FlexibleContexts, TypeOperators, UndecidableInstances,
-    QuasiQuotes, ScopedTypeVariables
+    QuasiQuotes
   #-}
 
 import Control.Monad
@@ -12,9 +12,9 @@ import DesugarHandlers
 [operation|Await s :: s|]
 [operation|Yield s :: s -> ()|]
 
-type Pipe i o h a   = ((h `Handles` Await) i, (h `Handles` Yield) o) => Comp h a
-type Consumer i h a = (h `Handles` Await) i => Comp h a
-type Producer o h a = (h `Handles` Yield) o => Comp h a
+type Pipe i o h a   = ([handles|h {Await i}|], [handles|h {Yield o}|]) => Comp h a
+type Consumer i h a = [handles|h {Await i}|] => Comp h a
+type Producer o h a = [handles|h {Yield o}|] => Comp h a
 
 newtype Prod s r = Prod (() -> Cons s r -> r)
 newtype Cons s r = Cons (s  -> Prod s r -> r)
@@ -40,7 +40,7 @@ d <+< u = down (Prod (\() cons -> up cons u)) d
 fromList :: [a] -> Producer a h ()
 fromList = mapM_ yield
 
-take' :: ((h `Handles` PutString) ()) => Int -> Pipe a a h ()
+take' :: [handles|h {PutString}|] => Int -> Pipe a a h ()
 take' n =
   do
     replicateM_ n $ do
@@ -55,13 +55,13 @@ take' n =
     PutString s k -> do {putStrLn s; k ()}
 |]
 
-printer :: (h `Handles` PutString) () => Consumer Int h r
+printer :: [handles|h {PutString}|] => Consumer Int h r
 printer =
   forever $ do
     x <- await
     putString (show x)
 
-pipeline :: (h `Handles` PutString) () => Comp h ()
+pipeline :: [handles|h {PutString}|] => Comp h ()
 pipeline = printer <+< take' 3 <+< fromList [(1::Int)..]
 
 produceFrom :: Int -> Producer Int h a
