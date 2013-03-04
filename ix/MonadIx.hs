@@ -19,6 +19,9 @@ seqIx f g = extendIx g . f
 (?>=) :: MonadIx m => m s i -> (s :-> m t) -> m t i
 (?>=) = flip extendIx
 
+(?>>) :: MonadIx m => m s i -> (forall j.m t j)  -> m t i
+p ?>> q = p ?>= (\_ -> q)
+
 -- instance MonadIx m => FunctorIx (m :: (i -> *) -> (i -> *)) where
 --   mapIx f c = c ?>= (returnIx . f)
 
