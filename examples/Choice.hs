@@ -71,6 +71,7 @@ sampleMaybe comp = (handleRandom . maybeResult . randomResult) comp
 sampleMaybe' comp = (handleRandom . randomResult . maybeResult) comp
 sample comp = handleRandom (persevere comp' comp')
     where comp' = randomResult comp
+sample' comp = handleRandom (randomResult (persevere comp comp))
 
 data Toss = Heads | Tails deriving Show
 drunkToss :: N Toss

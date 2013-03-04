@@ -202,14 +202,14 @@ count =
 
 -- main = test6
 
-test5 = simpleState  1000000000
-test6 = forwardState 1000000000
+test5 = simpleState                1000000000
+test6 = printHandler (forwardState 1000000000 count)
 -- lets not bother with IORefs - they're too slow
 test7 comp = do r <- newIORef 1000000000; iORefState r comp
 
 main = defaultMain [
          bcompare [ bench "simple"  $ whnf test5 count
-                  , bench "forward" $ whnf test6 count ]]
+                  , bench "forward" $ whnfIO test6 ]]
 
 -- test5: 10.1 seconds
 -- test6: 10.1 seconds
