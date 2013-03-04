@@ -1,6 +1,5 @@
 {-# LANGUAGE TypeFamilies,
     GADTs,
-    NoMonomorphismRestriction,
     RankNTypes,
     MultiParamTypeClasses,
     QuasiQuotes,
@@ -14,15 +13,18 @@
 
 import Control.Monad
 import Data.IORef
-import CodensityHandlers
-import CodensityTopLevel
+import Handlers
+import TopLevel
 import DesugarHandlers
+
+import Criterion.Main
+import Criterion.Config
 
 [operation|Get s :: s|]
 [operation|Put s :: s -> ()|]
 
 type SComp s a =
-  ((h `Handles` Get) s, (h `Handles` Put) s) => Comp h a
+  ([handles|h {Get s}|], [handles|h {Put s}|]) => Comp h a
 
 [handler|
   MonadicState s a :: s -> (a, s)
@@ -139,7 +141,7 @@ statePrintLog s comp = printHandler ((logPutPrinter . forwardState s . putLogger
 --putLogger :: (((h `Handles` LogPut) s) => SComp' h s a) -> ((h `Handles` LogPut) s) => SComp' h s a
 
 type SComp' h s a =
-  ((h `Handles` Get) s, (h `Handles` Put) s) => Comp h a
+  ([handles|h {Get s}|], [handles|h {Put s}|]) => Comp h a
 
 [operation|forall a.Err :: String -> a|]
 [handler|
@@ -151,13 +153,12 @@ type SComp' h s a =
 stateErr s = reportErr . forwardState s
 
 type SEComp s a =
-  ((h `Handles` Get) s, (h `Handles` Put) s, (h `Handles` Err) ()) =>
-     Comp h a
+  ([handles|h {Get s}|], [handles|h {Put s}|], [handles|h {Err}|]) =>
+       Comp h a
 
 comp2 :: SEComp Int Int
 comp2 = do {x <- get; if x == 0 then err "division by zero"
                       else put (256 `div` x); y <- get; return (y+16)}
-
 
 
 comp0 :: SComp String String
@@ -189,17 +190,26 @@ test4 = do {r <- newIORef 1; iORefState r comp1}
 -- *Main> do {r <- newIORef 1; iORefState r comp1}
 -- 4
 
-countH :: SComp Int Int
-countH =
+count :: SComp Int Int
+count =
     do {i <- get;
         if i == 0 then return i
-        else do {put (i-1); countH}}
+        else do {put (i-1); count}}
 
 
-test5 = print (simpleState 100000000 countH)
-test6 = printHandler (forwardState 10000000000 countH)
+-- test5 = print (simpleState 100000000 count)
+-- test6 = printHandler (forwardState 100000000 count)
 
-main = test5
+-- main = test6
+
+test5 = simpleState  1000000000
+test6 = forwardState 1000000000
+-- lets not bother with IORefs - they're too slow
+test7 comp = do r <- newIORef 1000000000; iORefState r comp
+
+main = defaultMain [
+         bcompare [ bench "simple"  $ whnf test5 count
+                  , bench "forward" $ whnf test6 count ]]
 
 -- test5: 10.1 seconds
 -- test6: 10.1 seconds

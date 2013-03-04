@@ -1,18 +1,27 @@
 {- Primitive recursion using handlers -}
-{-# LANGUAGE TypeFamilies, NoMonomorphismRestriction #-}
+
+{-# LANGUAGE TypeFamilies,
+    GADTs,
+    RankNTypes,
+    MultiParamTypeClasses,
+    QuasiQuotes,
+    FlexibleContexts,
+    ScopedTypeVariables #-}
 
 import Data.Either
 import Control.Monad
-import Handlers
 
-data Step = Step
-instance Op Step where
-  type Param Step = ()
-  type Return Step = ()
-step = applyOp Step ()
+import Handlers
+import DesugarHandlers
+
+[operation|Step :: ()|]
 
 -- natural numbers can be encoded as computations over the Step operation
-type Nat = Comp (Step, ()) ()
+type Nat = [handles|h {Step}|] => Comp h ()
+
+-- wrapping and unwrapping is necessary to work around
+-- deficiencies in GHCs handling of polymorphism
+newtype WrappedNat = Wrap {unWrap :: Nat}
 
 zero :: Nat
 zero  = return ()
@@ -20,6 +29,7 @@ zero  = return ()
 suc :: Nat -> Nat
 suc n = step >> n
 
+one, two, three, four, five, six :: Nat
 one   = suc zero
 two   = suc one
 three = suc two
@@ -27,48 +37,49 @@ four  = suc three
 five  = suc four
 six   = suc five
 
-toInt :: Nat -> Int
-toInt n =
-  handle n
-  ((Step |-> \p k -> 1+k p) :<: Empty,
-   \() -> 0)
-
 plus :: Nat -> Nat -> Nat
 plus m n = m >> n
 
-times :: Nat -> Nat -> Nat
-times m n =
-  handle m
-  ((Step |-> \p k -> plus n (k p)) :<: Empty,
-   return)
-
-fact :: Nat -> Nat
-fact n =
-  snd
-  (handle n
-   ((Step |-> \() k ->
-      let (p, q) = k () in
-      (suc p, times (suc p) q)) :<: Empty,
-    \() -> (zero, one)))
-
--- A System T recursor
-rec :: Nat -> a -> (a -> Nat -> a) -> a
-rec n v f =
-  snd
-  (handle n
-   ((Step |-> \() k ->
-      let (p, q) = k () in
-      (suc p, f q p)) :<: Empty,
-    \() -> (zero, v)))
+[handler|
+  ToInt :: Int
+    handles {Step} where
+      Return x   -> 0
+      Step     k -> 1+(k ())
+|]
 
 -- an iterator
 iter :: Nat -> a -> (a -> a) -> a
-iter n v f =
-  handle n
-   (Step |-> (\() k -> f (k ())) :<: Empty,
-    \() -> v)
+iter n v f = iterator v f n
+[handler|
+  Iterator a :: a -> (a -> a) -> a
+    handles {Step} where
+      Return ()   v _ -> v
+      Step      k v f -> f (k () v f)
+|]
 
--- predecessor function
-pred :: Nat -> Nat
-pred n =
-  fst (iter n (zero, zero) (\ (_, x) -> (x, suc x)))
+times :: Nat -> Nat -> Nat
+times m n = unWrap (iter n (Wrap m) (\(Wrap x) -> Wrap (plus x n)))
+
+-- predecessor function using iteration
+predIter :: Nat -> Nat
+predIter n =
+  unWrap (fst (iter n (Wrap zero, Wrap zero) (\ (_, Wrap x) -> (Wrap x, Wrap (suc x)))))
+
+-- A System T recursor
+rec :: Nat -> a -> (a -> Nat -> a) -> a
+rec n v f = snd (recursor v f n)
+[handler|
+  Recursor a :: a -> (a -> Nat -> a) -> (WrappedNat, a)
+    handles {Step} where
+      Return ()   v _ -> (Wrap zero, v)
+      Step      k v f -> let (Wrap p, q) = k () v f in
+                           (Wrap (suc p), f q p)
+|]
+
+-- predecessor function using recursion
+predRec :: Nat -> Nat
+predRec n =
+  unWrap (rec n (Wrap zero) (\_ m -> Wrap m))
+
+factorial :: Nat -> Nat
+factorial n = unWrap (rec n (Wrap zero) (\(Wrap x) m -> Wrap (times x m)))

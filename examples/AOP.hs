@@ -35,7 +35,8 @@ import Data.Monoid
 [operation|Tell s :: s -> ()|]
 
 type SComp s a =
-  ((h `Handles` Get) s, (h `Handles` Put) s) => Comp h a
+  forall h.(  [handles|h {Get s}|],
+              [handles|h {Put s}|]) => Comp h a
 
 [handler|
   forward h.

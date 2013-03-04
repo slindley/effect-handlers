@@ -18,7 +18,8 @@ import DesugarHandlers
   HandlePure a :: a handles {} where
     Return x -> x
 |]
-handlePure :: (forall h.Comp h a) -> a
+handlePure' :: (forall h.Comp h a) -> a
+handlePure' c = handlePure c
 
 [operation|forall a.Io :: IO a -> a|]
 [handler|

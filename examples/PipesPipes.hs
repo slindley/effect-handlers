@@ -20,7 +20,7 @@ printer =
     x <- await
     lift (print x)
 
-pipeline :: Pipe () C IO ()
+--pipeline :: Pipe () C IO ()
 pipeline = printer <+< take' 3 <+< fromList [1..]
 
 produceFrom :: (Monad m) => Int -> Producer Int m a

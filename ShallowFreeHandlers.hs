@@ -33,17 +33,17 @@ handle (Ret v) r h   = r v h
 handle (Do op k) r h = clause op k h
 
 -- pure handlers
-data PureHandler a = PureHandler
-type instance Result (PureHandler a) = a
-type instance Inner (PureHandler a) = a
+-- data PureHandler a = PureHandler
+-- type instance Result (PureHandler a) = a
+-- type instance Inner (PureHandler a) = a
 
-handlePure :: Comp (PureHandler a) a -> a
-handlePure comp = handle comp (\x _ -> x) PureHandler
+-- handlePure :: Comp (PureHandler a) a -> a
+-- handlePure comp = handle comp (\x _ -> x) PureHandler
 
-data IOHandler a = IOHandler
-type instance Result (IOHandler a) = IO a
-type instance Inner (IOHandler a) = a
+-- data IOHandler a = IOHandler
+-- type instance Result (IOHandler a) = IO a
+-- type instance Inner (IOHandler a) = a
 
-handleIO :: Comp (IOHandler a) a -> IO a
-handleIO comp = handle comp (\x _ -> return x) IOHandler 
+-- handleIO :: Comp (IOHandler a) a -> IO a
+-- handleIO comp = handle comp (\x _ -> return x) IOHandler 
 

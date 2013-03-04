@@ -57,8 +57,8 @@ type Logic a = [handles|h {Choose}|] => Comp h a
       Return x       -> return [x]
       Choose l     k -> step l []
                         where
-                          step []     zs = return zs
-                          step (x:xs) zs = do {ys <- k x; step xs (ys ++ zs)}
+                          step []     rs = return rs
+                          step (x:xs) rs = do {ys <- k x; step xs (rs ++ ys)}
 |]
 
 [handler|
@@ -67,8 +67,8 @@ type Logic a = [handles|h {Choose}|] => Comp h a
       Return x       -> return [x]
       Choose l     k -> step l []
                         where
-                          step []     zs = return zs
-                          step (x:xs) zs = do {ys <- k x; step xs (ys ++ zs)}
+                          step []     rs = return rs
+                          step (x:xs) rs = do {ys <- k x; step xs (rs ++ ys)}
 |]
 
 failed :: Logic a

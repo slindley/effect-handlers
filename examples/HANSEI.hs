@@ -363,26 +363,34 @@ sample :: ([handles|h {Rand}|], [handles|h {Failure}|]) => Q a -> Comp h a
 sample comp = sampleHandler comp
 
 sampleLoop' :: Q a -> IO a
-sampleLoop' comp = handleIO (sampleLoop (sample comp) (sample comp))
+sampleLoop' comp = handleRandom (sampleLoop (sample comp) (sample comp))
 
-instance (IOHandler a `Handles` Rand) () where
-  clause Rand k h =
-    do
-      r <- getStdRandom random
-      k r h
+[handler|
+  HandleRandom a :: IO a handles {Rand} where
+    Return x -> return x
+    Rand   k -> do {r <- getStdRandom random; k r}
+|]
+
+-- instance (IOHandler a `Handles` Rand) () where
+--   clause Rand k h =
+--     do
+--       r <- getStdRandom random
+--       k r h
 
 samples :: Ord a => Q a -> Int -> IO [(Prob, a)]
 samples comp n =
-  (handleIO (exploreHandler'
-             (do
-                 let l = take n (repeat (1/(fromIntegral n), ()))
-                 dist l
-                 sample comp)))
+  handleRandom
+          (exploreHandler'
+            (do
+                let l = take n (repeat (1/(fromIntegral n), ()))
+                dist l
+                sample comp))
 
 
 importanceSamples :: Ord a => Int -> Q a -> Int -> IO [(Prob, a)]
 importanceSamples i comp n =
-  handleIO (exploreHandler'
+  handleRandom
+          (exploreHandler'
             (do
                 let l = take n (repeat (1/(fromIntegral n), ()))
                 dist l
