@@ -11,6 +11,8 @@
     TypeOperators,
     ScopedTypeVariables #-}
 
+module Examples.State where
+
 import Control.Monad
 import Data.IORef
 import Handlers
@@ -196,20 +198,14 @@ count =
         if i == 0 then return i
         else do {put (i-1); count}}
 
+simple n = simpleState n count
+forward n = printHandler (forwardState n count)
 
--- test5 = print (simpleState 100000000 count)
--- test6 = printHandler (forwardState 100000000 count)
-
--- main = test6
-
-test5 = simpleState                1000000000
-test6 = printHandler (forwardState 1000000000 count)
--- lets not bother with IORefs - they're too slow
-test7 comp = do r <- newIORef 1000000000; iORefState r comp
+iterations = 1000000000
 
 main = defaultMain [
-         bcompare [ bench "simple"  $ whnf test5 count
-                  , bench "forward" $ whnfIO test6 ]]
+         bcompare [ bench "simple"  $ whnf simple iterations
+                  , bench "forward" $ whnf forward iterations ]]
 
--- test5: 10.1 seconds
--- test6: 10.1 seconds
+-- simple: 10.1 seconds
+-- forward: 10.1 seconds

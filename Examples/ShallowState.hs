@@ -12,6 +12,8 @@
     TypeOperators,
     ScopedTypeVariables #-}
 
+module Examples.ShallowState where
+
 import ShallowFreeHandlers
 import DesugarHandlers
 
@@ -46,12 +48,33 @@ import DesugarHandlers
 -- --simpleState' s comp = simpleState s (Comp (\k -> comp >>= k))
 
 
-countH =
+[shallowHandler|
+  forward h.
+    ForwardState s a :: s -> a 
+      handles {Get s, Put s} where
+        Return  x     _ -> return x
+        Get        k  s -> forwardState s (k s)
+        Put     s  k  _ -> forwardState s (k ())
+|]
+
+
+[operation|PrintLine :: String -> ()|]
+[shallowHandler|
+  PrintHandler a :: IO a
+    handles {PrintLine} where
+      Return x      -> return x
+      PrintLine s k -> do {putStrLn s; printHandler (k ())}
+|]
+
+
+count =
     do {i <- get;
         if i == 0 then return i
-        else do {put (i-1); countH}}
+        else do {put (i-1); count}}
 
+iterations = 100000000
 
-test5 = print (simpleState 100000000 countH)
+simple n  = simpleState n count
+forward n = printHandler (forwardState n count)
 
-main = test5
+main = forward iterations
