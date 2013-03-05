@@ -1,8 +1,17 @@
+{- An implementation of part of Gabriel Gonzalez's Pipes library using
+shallow handlers. The original library is here:
+
+    http://hackage.haskell.org/package/pipes
+ -}
+
+
 {-# LANGUAGE TypeFamilies, NoMonomorphismRestriction, RankNTypes,
     MultiParamTypeClasses, FlexibleInstances, OverlappingInstances,
     FlexibleContexts, TypeOperators, UndecidableInstances,
     QuasiQuotes, GADTs
   #-}
+
+module Examples.ShallowPipes where
 
 import Control.Monad
 
@@ -184,7 +193,4 @@ test6 n = blackhole <+< take' 1000 <+< expoPipe n <+< produceFrom 0
 test7 n = blackhole <+< takePure 1000 <+< expoPipe n <+< produceFrom 0
 
 simple = test0
-
-nested n = printHandler (test7 n)
-
-main = printHandler (test6 13)
+nested = test7

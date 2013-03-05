@@ -1,5 +1,5 @@
 {- An implementation of part of Gabriel Gonzalez's Pipes library using
-handlers. The original library is here:
+free monad handlers. The original library is here:
 
     http://hackage.haskell.org/package/pipes
  -}
@@ -10,13 +10,13 @@ handlers. The original library is here:
     QuasiQuotes
   #-}
 
-module Examples.Pipes where
+module Examples.FreePipes where
 
 import Control.Monad
 
-import Handlers
+import FreeHandlers
 import DesugarHandlers
-import TopLevel
+import FreeTopLevel
 
 [operation|Await s :: s|]
 [operation|Yield s :: s -> ()|]
@@ -145,9 +145,3 @@ test7 n = blackhole <+< takePure 1000 <+< expoPipe n <+< produceFrom 0
 
 simple = test0
 nested = test7
-
-main = printHandler (test6 13)
-
--- test4: 21.8 seconds
--- test6 13: 4.8 seconds
--- test6 14: 12.5 seconds

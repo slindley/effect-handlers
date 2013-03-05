@@ -27,6 +27,5 @@ shallow n = bgroup "shallow"
 
 comp n = [bcompare [pure n, monadic n, cont n, free n, codensity n, shallow n]]
 
-main = defaultMain [ bgroup ("10^" ++ (show iterExp))     (comp (10^iterExp))
-                   , bgroup ("10^" ++ (show (iterExp+1))) (comp (10^(iterExp+1)))
-                   , bgroup ("10^" ++ (show (iterExp+2))) (comp (10^(iterExp+2))) ]
+main = defaultMain [ bgroup ("10^" ++ (show m)) (comp (10^m))
+                   | m <- [iterExp..iterExp+2] ]
