@@ -1,13 +1,22 @@
+{- An implementation of part of Gabriel Gonzalez's Pipes library using
+handlers. The original library is here:
+
+    http://hackage.haskell.org/package/pipes
+ -}
+
 {-# LANGUAGE TypeFamilies, GADTs, NoMonomorphismRestriction, RankNTypes,
     MultiParamTypeClasses, FlexibleInstances, OverlappingInstances,
     FlexibleContexts, TypeOperators, UndecidableInstances,
     QuasiQuotes
   #-}
 
+module Examples.Pipes where
+
 import Control.Monad
 
 import Handlers
 import DesugarHandlers
+import TopLevel
 
 [operation|Await s :: s|]
 [operation|Yield s :: s -> ()|]
@@ -47,6 +56,14 @@ take' n =
       x <- await
       yield x
     putString "You shall not pass!"
+
+takePure :: Int -> Pipe a a h ()
+takePure n =
+  do
+    replicateM_ n $ do
+      x <- await
+      yield x
+
 
 [operation|PutString :: String -> ()|]
 [handler|
@@ -123,10 +140,15 @@ test2 = printer <+< sumTo 100000000 <+< count <+< count <+< produceFrom 0
 test3 = printer <+< sumTo 100000000 <+< count <+< count <+< count <+< produceFrom 0
 test4 = printer <+< sumTo 1000000000 <+< logger <+< produceFrom 0
 test5 = printer <+< take' 100 <+< expoPipe 10 <+< produceFrom 0
-test6 = blackhole <+< take' 1000 <+< expoPipe 13 <+< produceFrom 0
-test7 = blackhole <+< take' 1000 <+< expoPipe 14 <+< produceFrom 0
-main = printHandler test6
+test6 n = blackhole <+< take' 1000 <+< expoPipe n <+< produceFrom 0
+test7 n = blackhole <+< takePure 1000 <+< expoPipe n <+< produceFrom 0
+
+simple = test0
+
+nested n = printHandler (test7 n)
+
+main = printHandler (test6 13)
 
 -- test4: 21.8 seconds
--- test6: 4.8 seconds
--- test7: 12.5 seconds
+-- test6 13: 4.8 seconds
+-- test6 14: 12.5 seconds

@@ -7,7 +7,7 @@ import qualified Examples.ShallowState as S
 import qualified Examples.CodensityState as C
 import qualified Examples.FreeState as F
 
-iterations = 100000
+iterExp = 6
 
 pure    n = bench "pure"    $ whnf P.pure    n
 monadic n = bench "monadic" $ whnf P.monadic n 
@@ -27,5 +27,6 @@ shallow n = bgroup "shallow"
 
 comp n = [bcompare [pure n, monadic n, cont n, free n, codensity n, shallow n]]
 
-main = defaultMain [bgroup (show iterations)      (comp iterations),
-                    bgroup (show (10*iterations)) (comp (10*iterations))]
+main = defaultMain [ bgroup ("10^" ++ (show iterExp))     (comp (10^iterExp))
+                   , bgroup ("10^" ++ (show (iterExp+1))) (comp (10^(iterExp+1)))
+                   , bgroup ("10^" ++ (show (iterExp+2))) (comp (10^(iterExp+2))) ]
