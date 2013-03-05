@@ -56,11 +56,11 @@ import DesugarHandlers
 -- instance (h `Handles` op) () => (Up h a `Handles` op) () where
 --   clause op k (Up f) = doOp op >>= (\x -> up f (k x))
 
-type Pipe h s a     = ([handles|h {Await s}|], [handles|h {Yield s}|]) => Comp h a
-type Consumer h s a = [handles|h {Await s}|] => Comp h a
-type Producer h s a = [handles|h {Yield s}|] => Comp h a
+type Pipe i o h a     = ([handles|h {Await i}|], [handles|h {Yield o}|]) => Comp h a
+type Consumer i h a = [handles|h {Await i}|] => Comp h a
+type Producer o h a = [handles|h {Yield o}|] => Comp h a
 
-(<+<) :: Consumer (Down h s a) s a -> Producer (Up h s a) s a -> Comp h a
+(<+<) :: Consumer s (Down h s a) a -> Producer s (Up h s a) a -> Comp h a
 d <+< u = down u d
 
 
@@ -86,55 +86,64 @@ d <+< u = down u d
 -- (<+<) :: Consumer s (Down h s a) a -> Producer s (Up h s a) a -> Comp h a
 -- d <+< u = down (Prod (\() cons -> up cons u)) d
 
-(>+>) = flip (<+<)
 
-fromList :: [Int] -> Producer h Int ()
+fromList :: [a] -> Producer a h ()
 fromList = mapM_ yield
 
-take' :: [handles|h {PrintLine}|] => Int -> Pipe h s ()
+take' :: [handles|h {PutString}|] => Int -> Pipe a a h ()
 take' n =
   do
     replicateM_ n $ do
       x <- await
       yield x
-    printLine "You shall not pass!"
+    putString "You shall not pass!"
 
--- [operation|PutString :: String -> ()|]
--- newtype PutString = PutString String
--- type instance Return PutString = ()
--- putString s = doOp (PutString s)
+takePure :: Int -> Pipe a a h ()
+takePure n =
+  do
+    replicateM_ n $ do
+      x <- await
+      yield x
 
-[operation|PrintLine :: String -> ()|]
+
+[operation|PutString :: String -> ()|]
 [shallowHandler|
-  PrintHandler a :: IO a
-    handles {PrintLine} where
-      Return x      -> return x
-      PrintLine s k -> do {putStrLn s; printHandler (k ())}
+  PrintHandler a :: IO a handles {PutString} where
+    Return x      -> return x
+    PutString s k -> do {putStrLn s; printHandler (k ())}
 |]
 
-printer :: (Show s) => [handles|h {PrintLine}|] => Consumer h s r
+printer :: [handles|h {PutString}|] => Consumer Int h r
 printer =
   forever $ do
     x <- await
-    printLine (show x)
+    putString (show x)
 
-pipeline :: [handles|h {PrintLine}|] => Comp h ()
-pipeline = printer <+< take' 3 <+< fromList [1..]
+pipeline :: [handles|h {PutString}|] => Comp h ()
+pipeline = printer <+< take' 3 <+< fromList [(1::Int)..]
 
-produceFrom :: Int -> Producer h Int a
+produceFrom :: Int -> Producer Int h a
 produceFrom i =
   do
     yield i
     produceFrom $! i+1
 
+produceFromTo :: Int -> Int -> Producer Int h ()
+produceFromTo i j =
+  do
+    if i == j then return ()
+      else do yield i
+              (produceFromTo $! i+1) j
+
+
     
-count :: Pipe h Int a
+count :: Pipe i Int h a
 count =
   forever $ do
     _ <- await
     yield 1
 
-sumTo :: Int -> Pipe h Int ()
+sumTo :: Int -> Pipe Int Int h ()
 sumTo = sumTo' 0
   where
     sumTo' a limit =
@@ -144,7 +153,7 @@ sumTo = sumTo' 0
           x <- await
           sumTo' (x+a) limit
 
-logger :: Pipe h Int a
+logger :: Pipe Int Int h a
 logger =
   forever $ do
     x <- await
@@ -158,8 +167,24 @@ intLog b x = if x < b then 0
                  divide x l = if x < b then l
                               else divide (x `div` b) (l+1)
 
+expoPipe :: Int -> Pipe Int Int h a
+expoPipe 0 = forever $ do {x <- await; yield $! x+1}
+expoPipe n = expoPipe (n-1) <+< expoPipe (n-1)
+
+blackhole :: Consumer a h b
+blackhole = forever await
+
+test0 n = blackhole <+< produceFromTo 1 n
 test1 = printer <+< sumTo 100000000 <+< count <+< produceFrom 0
 test2 = printer <+< sumTo 100000000 <+< count <+< count <+< produceFrom 0
 test3 = printer <+< sumTo 100000000 <+< count <+< count <+< count <+< produceFrom 0
 test4 = printer <+< sumTo 1000000000 <+< logger <+< produceFrom 0
-main = printHandler test1
+test5 = printer <+< take' 100 <+< expoPipe 10 <+< produceFrom 0
+test6 n = blackhole <+< take' 1000 <+< expoPipe n <+< produceFrom 0
+test7 n = blackhole <+< takePure 1000 <+< expoPipe n <+< produceFrom 0
+
+simple = test0
+
+nested n = printHandler (test7 n)
+
+main = printHandler (test6 13)
