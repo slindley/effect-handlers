@@ -1,0 +1,8 @@
+The code in this directory is the library accompanying Oliveira,
+Shrijvers, and Cook's JFP 2012 paper:
+
+  MRI: Modular reasoning about interference in incremental programming
+
+Original code available here:
+
+  http://users.ugent.be/~tschrijv/MRI/

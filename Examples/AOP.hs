@@ -19,7 +19,7 @@ reasoning about interference in incremental programming -}
     TypeOperators,
     ScopedTypeVariables #-}
 
-module AOP where
+module Examples.AOP where
 
 import Handlers
 import TopLevel
@@ -192,3 +192,4 @@ test1 e = ioStringWriter (evalState [] (force (logger "eval" (beval e))))
 test2 e = ioStringWriter (evalState [] (force (dump (beval e))))
 test3 e = ioStringWriter (evalState [] (force (dump (logger "eval" (beval e)))))
 
+test4 e = handlePure (execWriter' (evalState [] (force (logger "eval" (beval e)))))
