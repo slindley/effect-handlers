@@ -2,7 +2,7 @@
 > {-# LANGUAGE FlexibleContexts #-}
 > {-# LANGUAGE FlexibleInstances #-}
 
-> module MRI_code.Interpreters where
+> module Benchmarks.MRI_code.Interpreters where
 >
 > import Prelude hiding (log, exp)
 > import Data.List hiding (insert)
@@ -11,8 +11,8 @@
 > import Control.Monad.Identity
 > import Control.Applicative hiding (empty)
 > import Data.Traversable hiding (mapM)
-> import MRI_code.Advice 
-> import MRI_code.Effects hiding (evalState)
+> import Benchmarks.MRI_code.Advice 
+> import Benchmarks.MRI_code.Effects hiding (evalState)
 > import Data.Map hiding (lookup,map)
 > import Control.Monad.Error
 
@@ -105,3 +105,8 @@
 >     extract (Left (msg,exp,_))  =  "Error: " ++ msg ++ 
 >                                    "\nIn Expression: " ++ show exp
 >     extract (Right t)           =  t
+
+Extra stuff for benchmarking:
+
+> logtest     = test1
+> logdumptest = test2

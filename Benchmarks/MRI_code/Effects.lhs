@@ -1,10 +1,10 @@
 > {-# LANGUAGE FlexibleContexts #-}
 
-> module MRI_code.Effects where
+> module Benchmarks.MRI_code.Effects where
 >
 > import Control.Monad.State hiding (evalState)
 > import Control.Monad.Identity
-> import MRI_code.Advice hiding (fib2)
+> import Benchmarks.MRI_code.Advice hiding (fib2)
 > import Data.Map (Map, empty, member, (!), insert)
 
 MEMO EXAMPLE

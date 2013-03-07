@@ -87,15 +87,17 @@ evalWriter' comp = evalWriter mempty comp
       Tell    s   k -> do putStr s; k ()
 |]
 
-
+-- using mconcat rather than mempty and mappend has a huge impact on
+-- performance
 [handler| 
   forward h.(Monoid s) =>
-    ExecWriter s a :: s -> s
+    ExecWriter s a :: [s] -> s
       handles {Tell s} where
-        Return  x      s -> return s
-        Tell    s'  k  s -> k () (s `mappend` s')
+        Return  x     ss -> return (mconcat (reverse ss))
+        Tell    s  k  ss -> k () (s : ss)
 |]
-execWriter' comp = execWriter mempty comp
+execWriter' comp = execWriter [] comp
+
 
 [operation|forall a.ThrowError e :: e -> a|]
 [handler|
@@ -193,3 +195,7 @@ test2 e = ioStringWriter (evalState [] (force (dump (beval e))))
 test3 e = ioStringWriter (evalState [] (force (dump (logger "eval" (beval e)))))
 
 test4 e = handlePure (execWriter' (evalState [] (force (logger "eval" (beval e)))))
+test5 e = handlePure (execWriter' (evalState [] (force (logger "eval" (dump (beval e))))))
+
+logtest     = test4
+logdumptest = test5

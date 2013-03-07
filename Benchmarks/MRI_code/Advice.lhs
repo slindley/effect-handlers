@@ -1,6 +1,6 @@
 > {-# LANGUAGE NoMonomorphismRestriction #-}
 
-> module MRI_code.Advice where
+> module Benchmarks.MRI_code.Advice where
 
 > import Data.Map
 > import Control.Monad.State
