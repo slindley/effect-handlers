@@ -106,7 +106,7 @@
 >                                    "\nIn Expression: " ++ show exp
 >     extract (Right t)           =  t
 
-Extra stuff for benchmarking:
+Extra stuff added for benchmarking:
 
 > logtest     = test1
 > logdumptest = test2
