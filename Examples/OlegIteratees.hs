@@ -1,13 +1,14 @@
--- This example demonstrates that Oleg Kiselyov's iteratees are
--- algebraic computations and enumerators are effect handlers. It is a
--- transcription of the code from Section 3 of Oleg's FLOPS 2012
--- paper, Iteratees:
--- 
---   http://okmij.org/ftp/Haskell/Iteratee/describe.pdf
+{-
+  Oleg's original implementation of iteratees. 
 
-{-# LANGUAGE GADTs, TypeFamilies, NoMonomorphismRestriction, RankNTypes, ImpredicativeTypes,
-    MultiParamTypeClasses, FlexibleInstances, OverlappingInstances,
-    FlexibleContexts, TypeOperators, ScopedTypeVariables, BangPatterns #-}
+  This example demonstrates that Oleg Kiselyov's iteratees are
+  algebraic computations and enumerators are effect handlers. It is a
+  transcription of the code from Section 3 of Oleg's FLOPS 2012
+  paper, Iteratees:
+
+    http://okmij.org/ftp/Haskell/Iteratee/describe.pdf
+-}
+{-# LANGUAGE BangPatterns #-}
 
 import Control.Monad
 

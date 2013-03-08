@@ -1,5 +1,5 @@
 {-
-  Iteratees as deep handlers.  
+  Iteratees as shallow handlers.
 
   This example demonstrates that Oleg Kiselyov's iteratees are
   algebraic computations and enumerators are effect handlers. It is a
@@ -16,8 +16,10 @@
 
 import Control.Monad
 
-import Handlers
+import ShallowFreeHandlers
 import DesugarHandlers
+
+import Unsafe.Coerce
 
 type LChar = Maybe Char
 
@@ -33,11 +35,12 @@ getline = loop ""
         check acc (Just c) | c /= '\n' = loop (c:acc)
         check acc _                    = return (reverse acc)
 
-[handler|
-  EvalHandler a :: String -> a handles {GetC} where
-    GetC     k ""    -> k Nothing ""
-    GetC     k (c:t) -> k (Just c) t
-    Return x   _     -> x
+[shallowHandler|
+  EvalHandler a :: String -> a
+    handles {GetC} where
+      GetC     k ""    -> evalHandler "" $ k Nothing
+      GetC     k (c:t) -> evalHandler t  $ k (Just c)
+      Return x   _     -> x
 |]
 
 eval :: String -> I a -> a
@@ -53,23 +56,45 @@ getlines = loop []
 -- unnecessarily traverses the unhandled part of the continuation
 -- once the input has run out.
 --
--- It seems that shallow handlers are needed to resolve this issue.
-[handler|
-  forward h handles {GetC}.EnStrHandler a :: String -> a
+-- The difficulty with writing an efficient version arises because
+-- of limitations in our type-class based implementation of        
+-- handlers. Frank, for example, would not have this problem.
+[shallowHandler|
+  forward h handles {GetC}.
+    EnStrHandler a :: String -> a
+      handles {GetC} where
+        Return x   _     -> return x
+        GetC     k ""    -> do {c <- getC; enStrHandler "" (k c)}
+        GetC     k (c:t) -> enStrHandler t $ k (Just c)
+|]
+
+-- this one is efficient, but is closed
+[shallowHandler|
+  EnStrHandlerRec a :: String -> Comp (EnStrHandlerRec a) a
     handles {GetC} where
       Return x   _     -> return x
-      GetC     k ""    -> do {c <- getC; k c ""}
-      GetC     k (c:t) -> k (Just c) t
+      GetC     k ""    -> do {c <- getC; k c}
+      GetC     k (c:t) -> enStrHandlerRec t $ k (Just c)
+|]
+
+-- this one is efficient and open, but relies on an unsafe coercion
+[shallowHandler|
+  forward h handles {GetC}.
+    EnStrHandlerUnsafe a :: String -> a
+      handles {GetC} where
+        Return x   _     -> return x
+        GetC     k ""    -> do {c <- getC; unsafeCoerce (k c)}
+        GetC     k (c:t) -> enStrHandlerUnsafe t $ k (Just c)
 |]
 
 en_str :: String -> I a -> I a
-en_str s comp = enStrHandler s comp
+en_str s comp = enStrHandlerUnsafe s comp
 
 -- RunHandler throws away any outstanding unhandled GetC applications
-[handler|
+[shallowHandler|
  forward h.RunHandler a :: a
     handles {GetC} where
-      GetC     k -> k Nothing
+      GetC     k -> runHandler $ k Nothing
       Return x   -> return x
 |]
 
@@ -78,28 +103,31 @@ run comp = runHandler comp
 
 
 -- like RunHandler but with no underlying handler
-[handler|
+[shallowHandler|
   PureRun a :: a
     handles {GetC} where
-      GetC   k -> k Nothing
       Return x -> x
+      GetC   k -> pureRun $ k Nothing
 |]
 
-
-data FlipState h a = FlipState Bool LChar (LChar -> FlipState h a -> Comp h a)
-[handler|
+[shallowHandler|
   forward h handles {GetC}.
-    FlipHandler a :: FlipState h a -> a handles {GetC} where
-      GetC     kl (FlipState True  c kr) -> do {kr c (FlipState False c kl)}
-      GetC     kr (FlipState False _ kl) -> do {c <- getC; kl c (FlipState True c kr)}
-      Return x    _                      -> return x
+    LeftI a :: (Comp (RightI h a) a) -> a
+      handles {GetC} where
+        Return x   r -> return x
+        GetC     k r -> undefined $ rightI k r
 |]
 
+[shallowHandler|
+  forward h handles {GetC}.
+    RightI a :: (LChar -> Comp (LeftI h a) a) -> a
+      handles {GetC} where
+        Return x   l -> return x
+        GetC     k l -> do {c <- getC; leftI (k c) (l c)}
+|]
 
--- synchronise two iteratees
 (<|) :: I a -> I a -> I a
-l <| r = flipHandler (FlipState True Nothing (\Nothing s -> flipHandler s r)) l
-
+l <| r = leftI r l
 
 -- Roughly, we get the following behaviour from the synchronised
 -- traces of (l <| r):
