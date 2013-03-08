@@ -5,7 +5,6 @@ reasoning about interference in incremental programming -}
 
 {-# LANGUAGE TypeFamilies,
     GADTs,
-    NoMonomorphismRestriction,
     RankNTypes,
     MultiParamTypeClasses,
     QuasiQuotes,
@@ -14,10 +13,7 @@ reasoning about interference in incremental programming -}
     OverlappingInstances,
     UndecidableInstances,
     ConstraintKinds,
-    DataKinds,
-    PolyKinds,
-    TypeOperators,
-    ScopedTypeVariables #-}
+    DataKinds #-}
 
 module Examples.AOP where
 

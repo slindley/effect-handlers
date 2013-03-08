@@ -21,7 +21,6 @@
     ConstraintKinds,
     TypeOperators,
     DataKinds,
-    PolyKinds,
     ScopedTypeVariables #-}
 
 import Handlers

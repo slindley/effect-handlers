@@ -1,10 +1,10 @@
 {- Encoding lists as computations -}
 
-{-# LANGUAGE TypeFamilies, NoMonomorphismRestriction,
+{-# LANGUAGE TypeFamilies,
     RankNTypes, GADTs,
-    MultiParamTypeClasses, TemplateHaskell, QuasiQuotes, FlexibleInstances,
+    MultiParamTypeClasses, QuasiQuotes, FlexibleInstances,
     OverlappingInstances, UndecidableInstances,
-    FlexibleContexts, TypeOperators, ScopedTypeVariables #-}
+    FlexibleContexts #-}
 
 import Control.Monad
 import Handlers

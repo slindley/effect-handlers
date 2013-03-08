@@ -1,6 +1,6 @@
 {-# LANGUAGE GADTs, TypeFamilies, RankNTypes,
     MultiParamTypeClasses, FlexibleInstances, OverlappingInstances,
-    FlexibleContexts, TypeOperators, UndecidableInstances,
+    FlexibleContexts, UndecidableInstances,
     QuasiQuotes
   #-}
 

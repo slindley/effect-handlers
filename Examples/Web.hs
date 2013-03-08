@@ -8,10 +8,7 @@
     OverlappingInstances,
     UndecidableInstances,
     ConstraintKinds,
-    TypeOperators,
-    DataKinds,
-    PolyKinds,
-    ScopedTypeVariables #-}
+    DataKinds #-}
 
 import Handlers
 import TopLevel

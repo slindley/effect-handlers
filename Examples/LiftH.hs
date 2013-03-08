@@ -8,11 +8,9 @@
     FlexibleContexts,
     OverlappingInstances,
     UndecidableInstances,
-    ConstraintKinds,
     DataKinds,
     PolyKinds,
-    TypeOperators,
-    ScopedTypeVariables #-}
+    TypeOperators #-}
 
 {- This is a handlers port of Jeff Newbern's example illustrating
 lifting for a stack of monads transformers.

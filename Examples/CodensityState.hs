@@ -6,9 +6,7 @@
     FlexibleInstances,
     FlexibleContexts,
     OverlappingInstances,
-    UndecidableInstances,
-    TypeOperators,
-    ScopedTypeVariables #-}
+    UndecidableInstances #-}
 
 module Examples.CodensityState where
 

@@ -7,9 +7,7 @@
     FlexibleContexts,
     OverlappingInstances,
     UndecidableInstances,
-    ConstraintKinds,
-    TypeOperators,
-    ScopedTypeVariables #-}
+    ConstraintKinds #-}
 
 module Examples.State where
 

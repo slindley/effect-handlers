@@ -1,7 +1,7 @@
 {-# LANGUAGE TypeFamilies, RankNTypes,
     MultiParamTypeClasses, FlexibleInstances, GADTs,
     OverlappingInstances, UndecidableInstances, QuasiQuotes,
-    FlexibleContexts, TypeOperators, ScopedTypeVariables, ConstraintKinds #-}
+    FlexibleContexts, ConstraintKinds #-}
 
 import Control.Monad
 import System.Random

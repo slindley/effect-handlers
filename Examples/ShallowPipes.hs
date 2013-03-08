@@ -4,11 +4,10 @@ shallow handlers. The original library is here:
     http://hackage.haskell.org/package/pipes
  -}
 
-
-{-# LANGUAGE TypeFamilies, NoMonomorphismRestriction, RankNTypes,
+{-# LANGUAGE TypeFamilies, GADTs, NoMonomorphismRestriction, RankNTypes,
     MultiParamTypeClasses, FlexibleInstances, OverlappingInstances,
-    FlexibleContexts, TypeOperators, UndecidableInstances,
-    QuasiQuotes, GADTs
+    FlexibleContexts, UndecidableInstances,
+    QuasiQuotes
   #-}
 
 module Examples.ShallowPipes where

@@ -6,7 +6,7 @@ handlers. The original library is here:
 
 {-# LANGUAGE TypeFamilies, GADTs, NoMonomorphismRestriction, RankNTypes,
     MultiParamTypeClasses, FlexibleInstances, OverlappingInstances,
-    FlexibleContexts, TypeOperators, UndecidableInstances,
+    FlexibleContexts, UndecidableInstances,
     QuasiQuotes
   #-}
 
@@ -16,7 +16,6 @@ import Control.Monad
 
 import Handlers
 import DesugarHandlers
-import TopLevel
 
 [operation|Await s :: s|]
 [operation|Yield s :: s -> ()|]
