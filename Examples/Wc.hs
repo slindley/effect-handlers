@@ -89,3 +89,29 @@ wc =
           do
           _ <- readLine  
           loop $! (i + 1)           
+          
+          
+[operation| SaveLine :: String -> () |]
+[operation| PrintAll :: () |]
+
+
+
+[handler| 
+  forward h handles {Io}. 
+    KeepAll0 a :: [String] -> Int -> a
+       handles {SaveLine, PrintAll} where
+           Return x _ _ -> return x
+           SaveLine s k l i -> k () (s:l) i
+           PrintAll k  l i  -> 
+                 do
+                 io (forM_ (take i l) putStrLn) 
+                 k () l i|]
+
+keepAll = keepAll0 []
+
+tailC = 
+  do
+  l <- readLine  
+  saveLine l
+  b <- eof
+  if b then printAll else tailC
