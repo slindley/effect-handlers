@@ -19,6 +19,7 @@ import System.IO
 import Control.Monad
 import Network
 import Control.Concurrent
+import Data.Array.IO
 
 [operation| ReadChar :: Maybe  Char |]
 [operation| Eof :: Bool |]
@@ -115,3 +116,37 @@ tailC =
   saveLine l
   b <- eof
   if b then printAll else tailC
+  
+data CircularArray  = CircularArray !Int !(IOArray Int String) !Int !Int
+  
+newCircularArray i = do
+  a <- io (newArray (0, i - 1) []) 
+  return (CircularArray i a 0 0)
+                       
+incrIdx length i = 
+  let j = i + 1 in
+  if (j < length) then j else 0
+
+push (CircularArray length arr first next) elt =                        
+  do
+    io (writeArray arr next elt)
+    let j = incrIdx length next 
+    return (CircularArray length arr (if (j == first) then (incrIdx length first) else first) j)
+  
+printAllCircularArray (CircularArray length arr first next) = 
+    loop first
+    where
+      loop i = if (i == next) 
+               then return () 
+               else do 
+                 io ((readArray arr i) >>= putStrLn)
+                 loop (incrIdx length i)
+                  
+ 
+ [handler|  
+  forward h handles {Io}.
+     CircularArray :: CircularArray -> a
+      handles {SaveLine, PrintAll} where
+         Return x _ -> return x    
+         SaveLine s k c -> push c s >>= k ()
+         PrintAll k c -> printAllCircularArray c >> k () c |]
