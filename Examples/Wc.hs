@@ -143,10 +143,33 @@ printAllCircularArray (CircularArray length arr first next) =
                  loop (incrIdx length i)
                   
  
- [handler|  
-  forward h handles {Io}.
-     CircularArray :: CircularArray -> a
+[handler|  
+ forward h handles {Io}.
+  CircularArrayH0 a :: CircularArray -> a 
       handles {SaveLine, PrintAll} where
          Return x _ -> return x    
          SaveLine s k c -> push c s >>= k ()
          PrintAll k c -> printAllCircularArray c >> k () c |]
+
+circularArrayH i p = do
+  c <- newCircularArray i
+  circularArrayH0 c p
+  
+    
+
+[handler| 
+ forward h handles {Io}.
+  StdinReader a :: a
+    handles {ReadChar,Eof} where
+          Return x -> return x
+          ReadChar k -> 
+                do
+                b <- io (hIsEOF stdin)
+                if b then k Nothing else io getChar >>= (k . Just)
+          Eof k -> io (hIsEOF stdin) >>= k|]
+                           
+
+tailStdin i = handleIO (stdinReader (circularArrayH (i+1) tailC))
+                             
+              
+main = tailStdin 10
