@@ -171,5 +171,8 @@ circularArrayH i p = do
 
 tailStdin i = handleIO (stdinReader (circularArrayH (i+1) tailC))
                              
+wcStdin = do            
+  (c,w,l) <- handleIO (stdinReader wc)
+  putStrLn $ (show l) ++ " " ++ (show w) ++ " " ++ (show c)
               
-main = tailStdin 10
+main = wcStdin
