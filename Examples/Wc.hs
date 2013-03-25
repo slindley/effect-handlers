@@ -31,9 +31,8 @@ readLine =
     case mc of 
       Nothing   -> return []
       Just '\n' -> return []
-      Just c -> do
-                  l <- readLine
-                  return (c : l)
+      Just c -> do cs <- readLine
+                   return (c : cs)
               
 [handler|
   forward h handles {ReadChar}.
@@ -52,26 +51,38 @@ countChar = countChar0 0
   forward h handles {ReadChar}.
     CountWord0 a :: Int -> Bool -> (a,Int) 
       handles {ReadChar} where
-        Return x i _ -> return (x,i)
+        Return x   i _ -> return (x,i)
         ReadChar k i b -> 
           do
             m <- readChar
             case m of 
               Nothing -> (k m $! (if b then i + 1 else i)) $ False
-              Just w  -> if (w == ' ' ||  w == '\t' || w == '\n' || w == '\r') then 
+              Just c  -> if (c == ' ' || c == '\t' || c == '\n' || c == '\r') then 
                            (k m $! (if b then i + 1 else i)) $ False
                          else
                            k m i True |]
 countWord = countWord0 0 False
 
 [handler|
-  StringReader a :: String -> a
-    handles {ReadChar, Finished} where
-      Return x   _       -> x
-      ReadChar k []      -> k Nothing []
-      ReadChar k (s : l) -> k (Just s) l      
-      Finished k []      -> k True []
-      Finished k l       -> k False l |]
+  forward h.
+    StringReader a :: String -> a
+      handles {ReadChar, Finished} where
+        Return x   _        -> return x
+        ReadChar k []       -> k Nothing []
+        ReadChar k (c : cs) -> k (Just c) cs
+        Finished k []       -> k True []
+        Finished k cs       -> k False cs |]
+
+[handler| 
+  forward h handles {Io}.
+    StdinReader a :: a
+      handles {ReadChar, Finished} where
+        Return x   -> return x
+        ReadChar k -> 
+          do
+            b <- io (hIsEOF stdin)
+            if b then k Nothing else io getChar >>= (k . Just)
+        Finished k -> io (hIsEOF stdin) >>= k|]
 
 wc :: ([handles|h {ReadChar}|], [handles|h {Finished}|]) => Comp h (Int, Int, Int)
 wc = 
@@ -88,6 +99,16 @@ wc =
            _ <- readLine  
            loop $! (i + 1)     
           
+wcStdin :: IO ()
+wcStdin = do            
+  (c, w, l) <- handleIO (stdinReader wc)
+  putStrLn $ (show l) ++ " " ++ (show w) ++ " " ++ (show c)
+              
+wcString :: String -> IO ()
+wcString s = do            
+  (c, w, l) <- handleIO (stringReader s wc)
+  putStrLn $ (show l) ++ " " ++ (show w) ++ " " ++ (show c)
+
           
 [operation|SaveLine :: String -> ()|]
 [operation|PrintAll :: ()|]
@@ -97,28 +118,28 @@ wc =
     KeepAll0 a :: [String] -> Int -> a
       handles {SaveLine, PrintAll} where
         Return x      _ _ -> return x
-        SaveLine s k  l i -> k () (s:l) i
-        PrintAll   k  l i -> 
+        SaveLine s k  ss i -> k () (s:ss) i
+        PrintAll   k  ss i -> 
           do
-            io (forM_ (take i l) putStrLn) 
-            k () l i |]
+            io (forM_ (take i ss) putStrLn) 
+            k () ss i |]
 keepAll = keepAll0 []
 
-tailC :: ([handles|h {ReadChar}|], [handles|h {Finished}|],
+tailComp :: ([handles|h {ReadChar}|], [handles|h {Finished}|],
           [handles|h {SaveLine}|], [handles|h {PrintAll}|]) => Comp h ()
-tailC =
+tailComp =
   do
-    l <- readLine  
-    saveLine l
+    s <- readLine    
+    saveLine s
     b <- finished
-    if b then printAll else tailC
+    if b then printAll else tailComp
   
 data CircularArray = CircularArray !Int !(IOArray Int String) !Int !Int
 
 newCircularArray :: [handles|h {Io}|] => Int -> Comp h CircularArray
-newCircularArray i = do
-  a <- io (newArray (0, i - 1) []) 
-  return (CircularArray i a 0 0)
+newCircularArray n = do
+  a <- io (newArray (0, n - 1) []) 
+  return (CircularArray n a 0 0)
 
 push :: [handles|h {Io}|] => CircularArray -> String -> Comp h CircularArray
 push (CircularArray length arr first next) s =                        
@@ -143,32 +164,19 @@ printAllCircularArray (CircularArray length arr first next) =
 
 [handler|  
   forward h handles {Io}.
-    CircularArrayH0 a :: CircularArray -> a 
+    LastN0 a :: CircularArray -> a 
       handles {SaveLine, PrintAll} where
         Return x     _ -> return x    
         SaveLine s k c -> push c s >>= k ()
         PrintAll   k c -> printAllCircularArray c >> k () c |]
-circularArrayH i p = do
-  c <- newCircularArray i
-  circularArrayH0 c p
+lastN n comp = do
+  c <- newCircularArray n
+  lastN0 c comp
 
-[handler| 
-  forward h handles {Io}.
-    StdinReader a :: a
-      handles {ReadChar, Finished} where
-        Return x -> return x
-        ReadChar k -> 
-          do
-            b <- io (hIsEOF stdin)
-            if b then k Nothing else io getChar >>= (k . Just)
-        Finished k -> io (hIsEOF stdin) >>= k|]
+tailLastN :: Int -> IO ()
+tailLastN n = handleIO (stdinReader (lastN (n+1) tailComp))
 
-tailStdin :: Int -> IO ()
-tailStdin i = handleIO (stdinReader (circularArrayH (i+1) tailC))
+tailAll :: Int -> IO ()
+tailAll n = handleIO (stdinReader (keepAll n tailComp))
 
-wcStdin :: IO ()
-wcStdin = do            
-  (c, w, l) <- handleIO (stdinReader wc)
-  putStrLn $ (show l) ++ " " ++ (show w) ++ " " ++ (show c)
-              
 main = wcStdin
