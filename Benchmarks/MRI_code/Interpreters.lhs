@@ -105,8 +105,3 @@
 >     extract (Left (msg,exp,_))  =  "Error: " ++ msg ++ 
 >                                    "\nIn Expression: " ++ show exp
 >     extract (Right t)           =  t
-
-Extra stuff added for benchmarking:
-
-> logtest     = test1
-> logdumptest = test2

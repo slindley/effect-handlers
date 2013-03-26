@@ -1,4 +1,4 @@
--- hardcoded evaluator with logging
+-- hardcoded evaluator with logging and environment dumping
 
 module Benchmarks.MonadicEval where
 
@@ -9,7 +9,9 @@ import Benchmarks.MRI_code.Interpreters (Expr(..), Env)
 
 eval :: Expr -> StateT Env (Writer String) Int
 eval exp =
-  do tell ("Entering eval with" ++ show exp ++ "\n")
+  do s <- get
+     tell (show s ++ "\n")
+     tell ("Entering eval with" ++ show exp ++ "\n")  
      result <-
        case exp of 
          Lit x             -> return x
@@ -33,4 +35,4 @@ eval exp =
      tell ("Exiting eval with" ++ show result ++ "\n")
      return result
 
-logtest e = execWriter (runStateT (eval e) [])
+logdumptest e = execWriter (runStateT (eval e) [])

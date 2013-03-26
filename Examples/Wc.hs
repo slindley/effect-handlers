@@ -12,6 +12,8 @@
     NoMonomorphismRestriction   
  #-}
 
+--module Examples.Wc where
+
 import Handlers
 import TopLevel
 import DesugarHandlers
@@ -81,8 +83,8 @@ countWord = countWord0 0 False
         ReadChar k -> 
           do
             b <- io (hIsEOF stdin)
-            if b then k Nothing else io getChar >>= (k . Just)
-        Finished k -> io (hIsEOF stdin) >>= k|]
+            if b then k Nothing else do c <- io getChar; k (Just c)
+        Finished k -> do b <- io (hIsEOF stdin); k b|]
 
 wc :: ([handles|h {ReadChar}|], [handles|h {Finished}|]) => Comp h (Int, Int, Int)
 wc = 
@@ -126,13 +128,11 @@ wcString s = do
 keepAll = keepAll0 []
 
 tailComp :: ([handles|h {ReadChar}|], [handles|h {Finished}|],
-          [handles|h {SaveLine}|], [handles|h {PrintAll}|]) => Comp h ()
+             [handles|h {SaveLine}|], [handles|h {PrintAll}|]) => Comp h ()
 tailComp =
   do
-    s <- readLine    
-    saveLine s
-    b <- finished
-    if b then printAll else tailComp
+    s <- readLine; saveLine s
+    b <- finished; if b then printAll else tailComp
   
 data CircularArray = CircularArray !Int !(IOArray Int String) !Int !Int
 
@@ -179,4 +179,4 @@ tailLastN n = handleIO (stdinReader (lastN (n+1) tailComp))
 tailAll :: Int -> IO ()
 tailAll n = handleIO (stdinReader (keepAll n tailComp))
 
-main = wcStdin
+main = tailLastN 20

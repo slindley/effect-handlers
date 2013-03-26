@@ -24,6 +24,8 @@ import DesugarHandlers
 import Control.Monad
 import Data.Monoid
 
+import Benchmarks.MRI_code.Interpreters (Expr(..), Env)
+
 [operation|Get s :: s|]
 [operation|Put s :: s -> ()|]
 
@@ -94,7 +96,6 @@ evalWriter' comp = evalWriter mempty comp
 |]
 execWriter' comp = execWriter [] comp
 
-
 [operation|forall a.ThrowError e :: e -> a|]
 [handler|
   forward h.
@@ -111,16 +112,15 @@ execWriter' comp = execWriter [] comp
         ThrowError e k -> return (Left e)
 |]
 
-
-data Expr
-  = Lit Int
-  | Var String
-  | Plus Expr Expr
-  | Assign String Expr
-  | Sequence [Expr]
-  | While Expr Expr
-  deriving Show
-type Env = [(String, Int)]
+-- data Expr
+--   = Lit Int
+--   | Var String
+--   | Plus Expr Expr
+--   | Assign String Expr
+--   | Sequence [Expr]
+--   | While Expr Expr
+--   deriving Show
+-- type Env = [(String, Int)]
 
 [operation|Suspend h s a :: s -> Comp h a -> a|]
 bevalStep :: ([handles|h {Get (Env)}|],
