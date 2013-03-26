@@ -33,6 +33,8 @@ import DesugarHandlers
 import Control.Monad
 import Data.Monoid
 
+import Benchmarks.MRI_code.Interpreters (Expr(..), Env)
+
 [operation|Get s :: s|]
 [operation|Put s :: s -> ()|]
 
@@ -117,15 +119,15 @@ execWriter' comp = execWriter mempty comp
         ThrowError e k -> return (Left e)
 |]
 
-data Expr
-  = Lit Int
-  | Var String
-  | Plus Expr Expr
-  | Assign String Expr
-  | Sequence [Expr]
-  | While Expr Expr
-  deriving Show
-type Env = [(String, Int)]
+-- data Expr
+--   = Lit Int
+--   | Var String
+--   | Plus Expr Expr
+--   | Assign String Expr
+--   | Sequence [Expr]
+--   | While Expr Expr
+--   deriving Show
+-- type Env = [(String, Int)]
 
 -- the representation of an expression as a computation
 type ExprComp a =
