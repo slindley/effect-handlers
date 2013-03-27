@@ -1,6 +1,6 @@
 {-# LANGUAGE GADTs, TypeFamilies, RankNTypes,
     MultiParamTypeClasses, FlexibleInstances, OverlappingInstances,
-    FlexibleContexts, UndecidableInstances,
+    FlexibleContexts, UndecidableInstances, TypeOperators,
     QuasiQuotes
   #-}
 
@@ -85,12 +85,10 @@ failed = choose []
                                   case r of
                                     Just _  -> return r
                                     Nothing -> pickFirst xs
-      -- Choose l k -> foldM (\m v ->
-      --                          case m of
-      --                            Just _  -> return m
-      --                            Nothing -> k v) Nothing l
 |]
 
+-- contorted way of picking the first result or failing
+-- without materialising a maybe type
 data Stack h a = Stack ([Stack h a -> Comp h a])
 [handler|
   forward h handles {Failure}.FirstHandler a :: Stack h a -> a
@@ -100,9 +98,10 @@ data Stack h a = Stack ([Stack h a -> Comp h a])
       Choose []     k (Stack (x:xs)) -> x (Stack xs)
       Choose (a:as) k (Stack l)      -> k a (Stack (map k as ++ l))
 |]
--- firstResult :: ((h `Handles` Failure) ()) => Logic a -> Comp h a
--- firstResult comp = firstHandler (Stack []) comp
+firstResult :: ((h `Handles` Failure) ()) => Logic a -> Comp h a
+firstResult comp = firstHandler (Stack []) comp
 
+-- an alternative way of avoiding materialising a maybe type
 [operation|Success a :: a -> ()|]
 [handler|
   forward h handles {Success a}.SuccessFailure a :: () handles {Choose} where
