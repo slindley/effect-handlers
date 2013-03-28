@@ -5,14 +5,19 @@ Effect handler libraries.
 
 Written by Ohad Kammar, Sam Lindley and Nicolas Oury.
 
-  * GHC:    handlers.hs
+  * GHC:    Handlers.hs
   * OCaml:  handlers.ml
   * SML/NJ: handlers.sml
   * Racket: handlers.rkt
 
-See the
-[draft paper](http://homepages.inf.ed.ac.uk/slindley/papers/handlers-draft-november2012.pdf)
-for further details.
+GHC examples:
 
-(An earlier draft is also available
-[here](http://homepages.inf.ed.ac.uk/slindley/papers/handlers.pdf).)
+  * Examples/
+
+GHC benchmarks:
+
+  * Benchmarks/
+
+See the
+[draft paper](http://homepages.inf.ed.ac.uk/slindley/papers/handlers-draft-march2013.pdf)
+for further details.
