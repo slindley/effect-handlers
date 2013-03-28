@@ -204,6 +204,3 @@ iterations = 1000000000
 main = defaultMain [
          bcompare [ bench "simple"  $ whnf simple iterations
                   , bench "forward" $ whnf forward iterations ]]
-
--- simple: 10.1 seconds
--- forward: 10.1 seconds

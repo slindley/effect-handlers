@@ -189,24 +189,3 @@ test n = if n == 0 then ""
          else "abc" ++ test (n-1)
 
 main = print (countH 'a' (test 100000000))
-
--- test 100000000 results:
---   oleg: 13.4
---   continuation monad: 9.7
---   codensity: 13.9
---   free monad: 17.3
-
--- -- count :: Char -> String -> Int
--- -- count c s = evalState (count' 0) s
--- --   where
--- --     count' :: Int -> State String Int
--- --     count' !n = 
--- --       do 
--- --         s <- get
--- --         case s of
--- --           [] -> return n
--- --           (c':cs) -> do {put cs; count' (if c==c' then (n+1) else n)}
-        
--- -- test n = if n == 0 then ""
--- --          else "abc" ++ test (n-1)
-

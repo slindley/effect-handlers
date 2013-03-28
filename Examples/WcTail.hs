@@ -1,3 +1,5 @@
+{- Word count and tail examples -}
+
 {-# LANGUAGE TypeFamilies,
     GADTs,
     RankNTypes,
@@ -36,6 +38,31 @@ readLine =
       Just c -> do cs <- readLine
                    return (c : cs)
               
+-- read from a string
+[handler|
+  forward h.
+    StringReader a :: String -> a
+      handles {ReadChar, Finished} where
+        Return x   _        -> return x
+        ReadChar k []       -> k Nothing []
+        ReadChar k (c : cs) -> k (Just c) cs
+        Finished k []       -> k True []
+        Finished k cs       -> k False cs |]
+
+-- read from stdin
+[handler| 
+  forward h handles {Io}.
+    StdinReader a :: a
+      handles {ReadChar, Finished} where
+        Return x   -> return x
+        ReadChar k -> 
+          do
+            b <- io (hIsEOF stdin)
+            if b then k Nothing else do c <- io getChar; k (Just c)
+        Finished k -> do b <- io (hIsEOF stdin); k b|]
+
+
+{- word count -}
 [handler|
   forward h handles {ReadChar}.
     CountChar0 a :: Int -> (a, Int)
@@ -65,27 +92,7 @@ countChar = countChar0 0
                            k m i True |]
 countWord = countWord0 0 False
 
-[handler|
-  forward h.
-    StringReader a :: String -> a
-      handles {ReadChar, Finished} where
-        Return x   _        -> return x
-        ReadChar k []       -> k Nothing []
-        ReadChar k (c : cs) -> k (Just c) cs
-        Finished k []       -> k True []
-        Finished k cs       -> k False cs |]
-
-[handler| 
-  forward h handles {Io}.
-    StdinReader a :: a
-      handles {ReadChar, Finished} where
-        Return x   -> return x
-        ReadChar k -> 
-          do
-            b <- io (hIsEOF stdin)
-            if b then k Nothing else do c <- io getChar; k (Just c)
-        Finished k -> do b <- io (hIsEOF stdin); k b|]
-
+-- abstract word-count computation
 wc :: ([handles|h {ReadChar}|], [handles|h {Finished}|]) => Comp h (Int, Int, Int)
 wc = 
    do 
@@ -111,7 +118,8 @@ wcString s = do
   (c, w, l) <- handleIO (stringReader s wc)
   putStrLn $ (show l) ++ " " ++ (show w) ++ " " ++ (show c)
 
-          
+
+{-- Tail --}
 [operation|SaveLine :: String -> ()|]
 [operation|PrintAll :: ()|]
 
@@ -119,7 +127,7 @@ wcString s = do
   forward h handles {Io}. 
     KeepAll0 a :: [String] -> Int -> a
       handles {SaveLine, PrintAll} where
-        Return x      _ _ -> return x
+        Return x      _  _ -> return x
         SaveLine s k  ss i -> k () (s:ss) i
         PrintAll   k  ss i -> 
           do

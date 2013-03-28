@@ -1,5 +1,5 @@
 {-
-  Oleg's original implementation of iteratees. 
+  Oleg Kiselyov's original implementation of iteratees. 
 
   This example demonstrates that Oleg Kiselyov's iteratees are
   algebraic computations and enumerators are effect handlers. It is a

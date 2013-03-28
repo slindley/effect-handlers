@@ -207,26 +207,3 @@ test10 n = handlePure (allResultsLeaky (queens' n))
 
 
 main = print (maximum (test10 13))
-
-
--- test2 22: 5.2 seconds
--- test3 22: 4.2 seconds
--- test4 22: 2.4 seconds
--- test5 22: 4.2 seconds
-
--- test6 11: 0.5 seconds
--- test6 12: 2.3 seconds
--- test6 13: 15.0 seconds
-
--- test7 11: 0.1 seconds
--- test7 12: 0.5 seconds
--- test7 13: 2.8 seconds
-
--- test8 11: 0.1 seconds
--- test8 12: 0.6 seconds
--- test8 13: 3.6 seconds
-
--- test9 11: 0.5 seconds
--- test9 12: 2.3 seconds
--- test9 13: 14.9 seconds
-

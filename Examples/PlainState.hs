@@ -23,6 +23,3 @@ pure    = countPure
 main = defaultMain [
        bgroup "state" [ bench "monadic" $ whnf monadic iterations
                       , bench "pure"    $ whnf pure    iterations ]]
-
--- monadic: 8.0 seconds
--- pure: 8.0 seconds

@@ -146,7 +146,3 @@ simple = test0
 nested = test7
 
 main = printHandler (test6 13)
-
--- test4: 21.8 seconds
--- test6 13: 4.8 seconds
--- test6 14: 12.5 seconds
