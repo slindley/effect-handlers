@@ -110,8 +110,3 @@ simple n = runPipe (test0 n)
 
 nested :: Int -> Identity ()
 nested n = runPipe (test7 n)
-
--- test4: 23.5 seconds
--- test6 13: 2.6 seconds
--- test6 14: 6.4 seconds
-
