@@ -1,4 +1,4 @@
-{- Parameterised monad handlers
+{- Handlers for parameterised notions of computation.
 
    A generalisation of handlers to support Bob Atkey's parameterised
 notions of computation:
