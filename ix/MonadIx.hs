@@ -9,7 +9,7 @@ import Unsafe.Coerce
 
 import FunctorIx
 
-class FunctorIx m => MonadIx (m :: (i -> *) -> (i -> *)) where
+class FunctorIx m => MonadIx (m :: (w -> *) -> (w -> *)) where
   returnIx :: a :-> m a
   extendIx :: (a :-> m b) -> (m a :-> m b)
 
@@ -22,14 +22,14 @@ seqIx f g = extendIx g . f
 (?>>) :: MonadIx m => m s i -> (forall j.m t j)  -> m t i
 p ?>> q = p ?>= (\_ -> q)
 
--- instance MonadIx m => FunctorIx (m :: (i -> *) -> (i -> *)) where
+-- instance MonadIx m => FunctorIx (m :: (w -> *) -> (w -> *)) where
 --   mapIx f c = c ?>= (returnIx . f)
 
 infix 3 :=
-data (:=) :: * -> i -> i -> * where
+data (:=) :: * -> w -> w -> * where
   V :: a -> (a := x) x
   
-ret ::  MonadIx m => forall (a :: *) (i :: i) . a -> m (a := i) i
+ret ::  MonadIx m => forall (a :: *) (i :: w) . a -> m (a := i) i
 ret a = returnIx (V a)
 
 -- The type of knownState expands to:
@@ -52,7 +52,7 @@ c =>= f = c ?>= knownState f
 -- over ordinary types.
 class PaMonad (m :: w -> w -> * -> *) where
   paReturn :: a -> m i i a
-  paExtend :: (a -> m j k b) -> (m i j a  -> m i k b)
+  paExtend :: (a -> m j k b) -> (m i j a -> m i k b)
 
 newtype PaMonadIx m i j a = PaMonadIx {unPaMonadIx :: (m (a := j) i)}
 instance MonadIx m => PaMonad (PaMonadIx m) where
@@ -100,7 +100,7 @@ instance MonadIx Path where
 
 -- The unsafeCoerce is required because GHC makes things unnecessarily
 -- complicated by adding a special 'Any' type to every kind.
-splip :: forall (s :: (i,j) -> *) (t :: (i,j) -> *) .
+splip :: forall (s :: (v,w) -> *) (t :: (v,w) -> *) .
            (forall i j . s '(i,j) -> t '(i,j)) -> s :-> t
 splip = unsafeCoerce
 -----

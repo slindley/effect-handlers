@@ -82,7 +82,7 @@ readOpenFile = fGetC =>= \x -> case x of
 
 newtype Wrap (a :: *) (i :: k) = Wrap {unWrap :: a}
 
-data FH (a :: *) (pre :: k) where
+data FH (a :: *) (pre :: FileState) where
      ClosedFH ::           FH a 'Closed 
      OpenFH   :: Handle -> FH a 'Open
 type instance Result (FH a) = Wrap (IO a)
