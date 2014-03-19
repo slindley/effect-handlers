@@ -132,7 +132,7 @@ import Language.Haskell.TH
 import Language.Haskell.TH.Quote
 
 import qualified Language.Haskell.Exts.Parser as Exts
-import Language.Haskell.Exts.Extension (Extension(..))
+import Language.Haskell.Exts.Extension
 
 --import Language.Haskell.SyntaxTrees.ExtsToTH
 import qualified Language.Haskell.Meta.Parse as MetaParse
@@ -458,22 +458,24 @@ parseType :: String -> Type
 parseType s =
   toType (Exts.fromParseResult
           (Exts.parseTypeWithMode
-           (Exts.ParseMode ""
-            [GADTs,
-             TypeFamilies, RankNTypes, FunctionalDependencies,
-             ScopedTypeVariables,
-             MultiParamTypeClasses, FlexibleInstances, FlexibleContexts,
-             TypeOperators] True True Nothing)
+           (Exts.ParseMode "" Haskell2010
+            (map EnableExtension
+             [GADTs,
+              TypeFamilies, RankNTypes, FunctionalDependencies,
+              ScopedTypeVariables,
+              MultiParamTypeClasses, FlexibleInstances, FlexibleContexts,
+              TypeOperators]) True True Nothing)
            s))
 
 parseDecs :: String -> [Dec]
 parseDecs s =
   toDecs (Exts.fromParseResult
           (Exts.parseDeclWithMode
-           (Exts.ParseMode ""
-            [GADTs,
-             MultiParamTypeClasses, FlexibleInstances, FlexibleContexts,
-             TypeOperators] True True Nothing)
+           (Exts.ParseMode "" Haskell2010
+            (map EnableExtension
+             [GADTs,
+              MultiParamTypeClasses, FlexibleInstances, FlexibleContexts,
+              TypeOperators]) True True Nothing)
            s))
 
 parseExp :: String -> Exp
@@ -505,4 +507,3 @@ splitFunType dummy f = (reverse ts, massageUnit t)
       split :: [Type] -> Type -> [Type]
       split ts (AppT (AppT ArrowT t) body) = split (t:ts) body
       split ts t = (t:ts)
-
