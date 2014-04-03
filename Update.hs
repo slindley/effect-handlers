@@ -21,19 +21,17 @@ import DesugarHandlers
 import Criterion.Main
 import Criterion.Config
 
-data NoPut = NoPut
-
 [operation|Put s :: s -> ()|]
 
 type SComp s a = ([handles|h {Put s}|]) => Comp h a
 
 [handler|
-  Update s a :: (s, a)
+  Update s a :: (Maybe s, a)
     handles {Put s} where
-      Return  x     -> (NoPut, x)
+      Return  x     -> (Nothing, x)
       Put     s  k  -> case k () of
-                         (NoPut, x) -> (s,  x)
-                         (s'   , x) -> (s', x)
+                         (Nothing, x) -> (Just s,  x)
+                         (s', x) -> (s', x)
 |] 
 
 foo1 = do put 32
