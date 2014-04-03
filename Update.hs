@@ -36,3 +36,9 @@ type SComp s a = ([handles|h {Put s}|]) => Comp h a
 
 foo1 = do put 32
           return ()
+
+{- heterogenous case would allow 
+foo2 = do put 32
+          put "hello"
+          return ()
+-}
