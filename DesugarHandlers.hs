@@ -141,6 +141,7 @@ import Language.Haskell.Meta.Syntax.Translate (toType, toDecs)
 import Data.List
 import Data.Char(toUpper,toLower)
 
+import Debug.Trace
 
 {- Handles constraints -}
 handles = QuasiQuoter { quoteExp = undefined, quotePat = undefined,
@@ -188,7 +189,7 @@ makeHandlerDef shallow (h, name, ts, sig, r, cs) =
     let cname = mkName (let (c:cs) = name in toUpper(c) : cs)
         fname = mkName (let (c:cs) = name in toLower(c) : cs)
         
-        (args, result') = splitFunType True (parseType (r ++ " -> ()"))
+        (args, result', ctxt) = splitFunType True (parseType (r ++ " -> ()"))
         (tyvars, parentSig, constraint, result) =
           case h of
             Just (h, p, c) -> ([h'] ++ map mkName ts, p, c, result)
@@ -292,7 +293,7 @@ makeHandlerDef shallow (h, name, ts, sig, r, cs) =
                     opArgs          = reverse (drop (length args + 1) (reverse ps))
             
             decs <- makeClauseDecs (filter (matchOp (== opName)) opCases)          
-            return (InstanceD (parentCtx ++ rawCtx) handles decs)
+            return (InstanceD (parentCtx ++ rawCtx ++ ctxt) handles decs)
             
         retDec = FunD (mkName "ret") (map makeClause retCases)
           where
@@ -385,7 +386,7 @@ opParser s = makeOpDefs (parseOpDef s)
 makeOpDefs :: OpDef -> Q [Dec]
 makeOpDefs (us, name, ts, sig) =
   do
-    let (args, result) = splitFunType True (parseType (sig ++ " -> ()"))
+    let (args, result, _) = splitFunType True (parseType (sig ++ " -> ()"))
         f = parseType sig
 
         cname = mkName (let (c:cs) = name in toUpper(c) : cs)
@@ -487,13 +488,14 @@ appExp f (e:es) = appExp (AppE f e) es
 appType f []     = f
 appType f (t:ts) = appType (AppT f t) ts
 
-splitFunType :: Bool -> Type -> ([Type], Type)
-splitFunType dummy f = (reverse ts, massageUnit t)
+splitFunType :: Bool -> Type -> ([Type], Type, [Pred])
+splitFunType dummy f = (reverse ts, massageUnit t, ctxt)
     where
-      (t : ts) =
+      (t : ts, ctxt) =
           if dummy then
               -- ignore the dummy return type
-              tail (split [] f)
+              let (t, ctxt) = split [] f
+              in (tail t, ctxt)
           else
               split [] f
 
@@ -504,6 +506,9 @@ splitFunType dummy f = (reverse ts, massageUnit t)
       massageUnit (ConT name) | nameBase name == "()" = TupleT 0
       massageUnit t = t
 
-      split :: [Type] -> Type -> [Type]
+      split :: [Type] -> Type -> ([Type], [Pred])
+      -- If there is a constraint, separate this part out
+      split ts (ForallT [] ctxt t)         = let (ts', ctxt') = split ts t in (ts', ctxt ++ ctxt')
+
       split ts (AppT (AppT ArrowT t) body) = split (t:ts) body
-      split ts t = (t:ts)
+      split ts t = (t:ts, [])
