@@ -10,7 +10,9 @@
     ConstraintKinds, 
     NoMonomorphismRestriction #-}
 
-module Examples.State where
+module Examples.Writer where
+
+-- Added by Dominic Orchard, http://dorchard.co.uk
 
 import Control.Monad
 import Data.IORef
@@ -23,9 +25,9 @@ import Data.Monoid
 import Criterion.Main
 import Criterion.Config
 
-[operation|Tell s :: s -> ()|]
+[operation| Tell s :: s -> () |]
 
-type SComp s a = ([handles|h {Tell s}|]) => Comp h a
+type SComp s a = ([handles| h {Tell s} |]) => Comp h a
 
 [handler|
   ListWriter s a :: (a, [s])

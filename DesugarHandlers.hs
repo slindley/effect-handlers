@@ -141,8 +141,6 @@ import Language.Haskell.Meta.Syntax.Translate (toType, toDecs)
 import Data.List
 import Data.Char(toUpper,toLower)
 
-import Debug.Trace
-
 {- Handles constraints -}
 handles = QuasiQuoter { quoteExp = undefined, quotePat = undefined,
                         quoteType = handlesParser, quoteDec = undefined}
