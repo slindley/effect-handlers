@@ -25,7 +25,7 @@
     data Put (e :: *) (u :: *) where
       Put :: s -> Put s ()
     type instance Return (Put s ()) = ()
-    put :: forall h s :: (h `Handles` Put) => s -> Comp h ()
+    put :: forall h s . (h `Handles` Put) => s -> Comp h ()
     put s = doOp (Put s)
 
   A non-forwarding state handler:
