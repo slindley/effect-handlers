@@ -340,7 +340,7 @@ makeHandlerDef shallow (h, name, ts, sig, r, cs) =
               do
                 forwardDecs <-
                     if shallow then
-                        -- "clause op k (cname p q) = doOp op >>= (\x -> fname p q (k x)"
+                        -- "clause op k (cname p q) = doOp op >>= (\x -> fname p q (k x))"
                         do
                           let op = mkName "op"
                               bind = VarE (mkName ">>=")
@@ -501,4 +501,3 @@ splitFunType dummy f = (reverse ts, massageUnit t)
       split :: [Type] -> Type -> [Type]
       split ts (AppT (AppT ArrowT t) body) = split (t:ts) body
       split ts t = (t:ts)
-
