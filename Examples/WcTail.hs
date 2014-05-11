@@ -114,8 +114,8 @@ wcStdin = do
   putStrLn $ (show l) ++ " " ++ (show w) ++ " " ++ (show c)
               
 wcString :: String -> IO ()
-wcString s = do            
-  (c, w, l) <- handleIO (stringReader s wc)
+wcString s =          
+  let (c, w, l) = handlePure (stringReader s wc) in
   putStrLn $ (show l) ++ " " ++ (show w) ++ " " ++ (show c)
 
 

@@ -18,14 +18,14 @@
 
     data Get (e :: *) (u :: *) where
       Get :: Get s ()
-    type instance Return (Get s) = s
+    type instance Return (Get s ()) = s
     get :: forall h s.(h `Handles` Get) () => Comp h s
     get = doOp Get
 
     data Put (e :: *) (u :: *) where
       Put :: s -> Put s ()
-    type instance Return (Put s) = ()
-    put :: forall h s :: (h `Handles` Put) => s -> Comp h ()
+    type instance Return (Put s ()) = ()
+    put :: forall h s . (h `Handles` Put) => s -> Comp h ()
     put s = doOp (Put s)
 
   A non-forwarding state handler:
@@ -39,7 +39,7 @@
 
   This elaborates to:
 
-    newtype StateHandler s a = StateHandler s
+    newtype StateHandler (s :: *) (a :: *) = StateHandler s
     type instance Result (StateHandler s a) = a
     instance (StateHandler s a `Handles` Get s) where
       clause Get     k' (StateHandler s) = k s s
@@ -62,7 +62,7 @@
 
   This prepends h to the list of FStateHandler's type variables yielding:
 
-    newtype FStateHandler h s a = FStateHandler s
+    newtype FStateHandler (h :: *) (s :: *) (a :: *) = FStateHandler s
     type instance Result (FStateHandler h s a) = a
     instance (FStateHandler h s a `Handles` Get s) where
       clause Get     k' (FStateHandler s) = k s s
@@ -76,8 +76,12 @@
 
   and additionally generates the following forwarding instance:
 
-    instance (h `Handles` op) s => (PVHandler h a `Handles` op) s where
+    instance (h `Handles` op) t => (FStateHandler h s a `Handles` op) t where
       clause op k h = doOp op >>= (\x -> k x h)
+
+  IMPORTANT: the kind annotations are critical if PolyKinds is
+  switched on. Without them type inference can't ope with the forwarding
+  clause.
 
   A polymorphic operation:
 
@@ -99,9 +103,9 @@
          Failure  k -> Nothing
     |]
 
-  This elaborates to
+  This elaborates to:
 
-    newtype MaybeHandler a = MaybeHandler
+    newtype MaybeHandler (a :: *) = MaybeHandler
     type instance Result (MaybeHandler a) = a
     instance (MaybeHandler a `Handles` Failure) where
       clause Failure k = Nothing
@@ -128,7 +132,7 @@ import Language.Haskell.TH
 import Language.Haskell.TH.Quote
 
 import qualified Language.Haskell.Exts.Parser as Exts
-import Language.Haskell.Exts.Extension (Extension(..))
+import Language.Haskell.Exts.Extension
 
 --import Language.Haskell.SyntaxTrees.ExtsToTH
 import qualified Language.Haskell.Meta.Parse as MetaParse
@@ -331,8 +335,8 @@ makeHandlerDef shallow (h, name, ts, sig, r, cs) =
         return (FunD fname [Clause (handlerArgs ++ [VarP comp]) body [retDec]])
           
     -- If this is a forwarding handler then generate the appropriate
-    -- type class instances to forward monomorphic and polymorphic
-    -- operations to the parent handler.
+    -- type class instances to forward operations to the parent
+    -- handler.
     forwardClauses <-
           case h of
             Nothing -> return []
@@ -454,22 +458,24 @@ parseType :: String -> Type
 parseType s =
   toType (Exts.fromParseResult
           (Exts.parseTypeWithMode
-           (Exts.ParseMode ""
-            [GADTs,
-             TypeFamilies, RankNTypes, FunctionalDependencies,
-             ScopedTypeVariables,
-             MultiParamTypeClasses, FlexibleInstances, FlexibleContexts,
-             TypeOperators] True True Nothing)
+           (Exts.ParseMode "" Haskell2010
+            (map EnableExtension
+             [GADTs,
+              TypeFamilies, RankNTypes, FunctionalDependencies,
+              ScopedTypeVariables,
+              MultiParamTypeClasses, FlexibleInstances, FlexibleContexts,
+              TypeOperators]) True True Nothing)
            s))
 
 parseDecs :: String -> [Dec]
 parseDecs s =
   toDecs (Exts.fromParseResult
           (Exts.parseDeclWithMode
-           (Exts.ParseMode ""
-            [GADTs,
-             MultiParamTypeClasses, FlexibleInstances, FlexibleContexts,
-             TypeOperators] True True Nothing)
+           (Exts.ParseMode "" Haskell2010
+            (map EnableExtension
+             [GADTs,
+              MultiParamTypeClasses, FlexibleInstances, FlexibleContexts,
+              TypeOperators]) True True Nothing)
            s))
 
 parseExp :: String -> Exp
