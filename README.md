@@ -19,5 +19,5 @@ GHC benchmarks:
   * Benchmarks/
 
 See the
-[draft paper](http://homepages.inf.ed.ac.uk/slindley/papers/handlers-draft-march2013.pdf)
+[paper](http://homepages.inf.ed.ac.uk/slindley/papers/handlers.pdf)
 for further details.
