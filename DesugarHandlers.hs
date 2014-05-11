@@ -206,12 +206,16 @@ makeHandlerDef shallow (h, name, ts, sig, r, cs) =
                     (map (\tv -> KindedTV tv StarT) tyvars)
                     [NormalC cname (map (\arg -> (IsStrict, arg)) args)]
                     []
+        {- NOTE: minor change in API for Template Haskell 2.9.0.
+           TySynInstD now takes two arguments, the second of which
+           is a TySynEqn.
+        -}
         resultInstance =
           TySynInstD (mkName "Result")
-          [appType (ConT cname) (map VarT tyvars)] result
+          (TySynEqn [appType (ConT cname) (map VarT tyvars)] result)
         innerInstance =
           TySynInstD (mkName "Inner")
-          [appType (ConT cname) (map VarT tyvars)] (VarT (last tyvars))
+          (TySynEqn [appType (ConT cname) (map VarT tyvars)] (VarT (last tyvars)))
         
         CaseE _ cases = parseExp ("case undefined of\n" ++ cs)
         
@@ -416,7 +420,7 @@ makeOpDefs (us, name, ts, sig) =
             []
         returnInstance =
           TySynInstD (mkName "Return")
-          [appType (ConT cname) [eimp, uimp]] result
+          (TySynEqn [appType (ConT cname) [eimp, uimp]] result)
     xs <- mapM (\_ -> newName "x") args
     
     opFunSig <-
