@@ -95,14 +95,16 @@ queensComp n = foldM f [] [1..n] where
                     then return (row : rows)
                     else failed
 
-size = 22
+--size = 22
   
 pureTest    n = head (queensPure n)
 maybeTest   n = fromJust (handlePure (maybeResults (queensComp n)))
 successTest n = fromJust (handlePure (maybeSuccess (successFailure (queensComp n))))
 firstTest   n = undefinedFailure (firstResult (queensComp n))
 
-main = do defaultMain [bcompare [ bench "pure"     $ whnf pureTest    size 
-                                , bench "handlers" $ whnf maybeTest   size 
-                                , bench "success"  $ whnf successTest size
-                                , bench "first"    $ whnf firstTest   size ] ]
+group n = bcompare [ bench "pure"     $ whnf pureTest    n 
+                   , bench "handlers" $ whnf maybeTest   n 
+                   , bench "success"  $ whnf successTest n
+                   , bench "first"    $ whnf firstTest   n ]
+
+main = do defaultMain [ group n | n <- [16..20] ]
