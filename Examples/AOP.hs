@@ -154,8 +154,8 @@ beval e = suspend e (bevalStep e)
 
 [handler|
   forward h.
-    Force a :: a
-      handles {Suspend (Force h a) s a} where
+    Force s a :: a
+      handles {Suspend (Force h s a) s a} where
         Return x         -> return x
         Suspend e comp k -> do x <- force comp; k x
 |]
