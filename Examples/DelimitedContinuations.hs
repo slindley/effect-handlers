@@ -10,7 +10,7 @@
              GADTs
   #-}
 
-module DelimitedContinuations where
+module Examples.DelimitedContinuations where
 
 import DesugarHandlers
 import Handlers
