@@ -24,7 +24,7 @@ expressions as handlers. -}
     TypeOperators,
     ScopedTypeVariables #-}
 
-module AOPExtra where
+module Examples.AOPExtra where
 
 import Handlers
 import TopLevel
@@ -157,16 +157,16 @@ while e1 e2 = do b <- cWhile; if b then e1 else e2
 [operation|Suspend h s a :: s -> Comp h a -> a|]
 [handler|
   forward h.
-    Force a :: a
-      handles {Suspend (Force h a) s a} where
+    Force s a :: a
+      handles {Suspend (Force h s a) s a} where
         Return x         -> return x
         Suspend e comp k -> do x <- force comp; k x
 |]
 
 [handler|
   forward h handles {Tell (String), Suspend h s a}.(Show s, Show a) =>
-    Logger a :: String -> a
-      handles {Suspend (Logger h a) s a} where
+    Logger s a :: String -> a
+      handles {Suspend (Logger h s a) s a} where
         Return x              _    -> return x
         Suspend e comp    k   name -> do tell ("Entering " ++ name ++ " with " ++ show e ++ "\n")
                                          y <- suspend e (logger name comp)
