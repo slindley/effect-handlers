@@ -72,6 +72,19 @@ comp1 = get =>= (\n ->
 
 test1 = handle comp1 (\s _ -> s) (State 20)
 
+{- Now we can implement the fully general form of shift0 (in which the
+return type can change) -}
+data Shift0 (a :: *) (i :: *) (o :: *) where
+  Shift0 :: ((a -> o) -> i) -> Shift0 a i o
+type instance Return (Shift0 a i o) = a
+
+data Reset0 (a :: *) where
+  Reset0 :: Reset0 a
+ 
+type instance Result (Reset0 a) = a
+instance (Reset0 `Handles` Shift0 a) where
+   clause (Shift0 p) k Reset0 = p (\x -> k x Reset0)
+
 -- Forwarding is where things start to get interesting. Here's a
 -- useless example of forwarding. This approach isn't going to scale
 -- because it doesn't allow states to be transmitted across the
