@@ -1,7 +1,9 @@
-{- An implementation of part of Gabriel Gonzalez's Pipes library using
-shallow handlers. The original library is here:
+{- 
+   This example (due to Oscar Key) illustrates the limitations of our
+encoding of effect typing in Haskell. The effects have been replaced
+by concrete handlers Up and Down which are different types.
 
-    http://hackage.haskell.org/package/pipes
+Tested with ghc 7.8.4.
  -}
 
 {-# LANGUAGE TypeFamilies, GADTs, NoMonomorphismRestriction, RankNTypes,
@@ -10,9 +12,7 @@ shallow handlers. The original library is here:
     QuasiQuotes
   #-}
 
-module Examples.ShallowPipes where
-
-import Control.Monad
+module Examples.UpDown where
 
 import ShallowFreeHandlers
 import DesugarHandlers
