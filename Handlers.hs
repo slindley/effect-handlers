@@ -31,5 +31,9 @@ instance Monad (Comp h) where
   return v     = Comp (\k h -> k v h)
   Comp c >>= f = Comp (\k h -> c (\x h' -> handle (f x) k h') h)
 
+instance Applicative (Comp h) where
+  pure    = return
+  f <*> a = do {f' <- f; a' <- a; return (f' a')}
+
 instance Functor (Comp h) where
   fmap f c = c >>= \x -> return (f x)

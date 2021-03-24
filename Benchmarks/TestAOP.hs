@@ -1,5 +1,4 @@
 import Criterion.Main
-import Criterion.Config
 
 import qualified Examples.AOP as H
 import qualified Benchmarks.MRI_code.Interpreters as M
@@ -27,9 +26,9 @@ randomExpr n = do i <- getStdRandom (randomR(1, n-1))
 
 makeGroup n =
   do e <- randomExpr n
-     return $ bgroup (show n) [ bcompare [ bench "concrete" $ whnf last (P.logdumptest e)
-                                         , bench "mixins"   $ whnf last (M.test2 e)
-                                         , bench "handlers" $ whnf last (H.logdumptest e) ] ]
+     return $ bgroup (show n) [ bgroup "AOP" [ bench "concrete" $ whnf last (P.logdumptest e)
+                                             , bench "mixins"   $ whnf last (M.test2 e)
+                                             , bench "handlers" $ whnf last (H.logdumptest e) ] ]
 
 seed = 42
 

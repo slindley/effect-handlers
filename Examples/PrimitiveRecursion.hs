@@ -65,21 +65,21 @@ predIter :: Nat -> Nat
 predIter n =
   unWrap (fst (iter n (Wrap zero, Wrap zero) (\ (_, Wrap x) -> (Wrap x, Wrap (suc x)))))
 
--- A System T recursor
-rec :: Nat -> a -> (a -> Nat -> a) -> a
-rec n v f = snd (recursor v f n)
-[handler|
-  Recursor a :: a -> (a -> Nat -> a) -> (WrappedNat, a)
-    handles {Step} where
-      Return ()   v _ -> (Wrap zero, v)
-      Step      k v f -> let (Wrap p, q) = k () v f in
-                           (Wrap (suc p), f q p)
-|]
+-- -- A System T recursor
+-- rec :: Nat -> a -> (a -> Nat -> a) -> a
+-- rec n v f = snd (recursor v f n)
+-- [handler|
+--   Recursor a :: a -> (a -> Nat -> a) -> (WrappedNat, a)
+--     handles {Step} where
+--       Return ()   v _ -> (Wrap zero, v)
+--       Step      k v f -> let (Wrap p, q) = k () v f in
+--                            (Wrap (suc p), f q p)
+-- |]
 
--- predecessor function using recursion
-predRec :: Nat -> Nat
-predRec n =
-  unWrap (rec n (Wrap zero) (\_ m -> Wrap m))
+-- -- predecessor function using recursion
+-- predRec :: Nat -> Nat
+-- predRec n =
+--   unWrap (rec n (Wrap zero) (\_ m -> Wrap m))
 
-factorial :: Nat -> Nat
-factorial n = unWrap (rec n (Wrap zero) (\(Wrap x) m -> Wrap (times x m)))
+-- factorial :: Nat -> Nat
+-- factorial n = unWrap (rec n (Wrap zero) (\(Wrap x) m -> Wrap (times x m)))

@@ -18,12 +18,12 @@ import TopLevel
 import DesugarHandlers
 
 import Criterion.Main
-import Criterion.Config
+-- import Criterion.Config
 
 [operation|Get s :: s|]
 [operation|Put s :: s -> ()|]
 
-type SComp s a =
+type SComp s a = forall h.
   ([handles|h {Get s}|], [handles|h {Put s}|]) => Comp h a
 
 [handler|
@@ -70,17 +70,19 @@ type SComp s a =
 --       Err     m  k  s -> do {x <- err m; k x s}
 -- |]
 --
+-- SL: the following handler no longer compiles
+--
 -- Here's one (rather ugly) fix:
-newtype WrappedComp h c a = Wrap {unWrap :: c => Comp h a}
-type WrappedErrComp h a = WrappedComp h [handles|h {Err}|] a
-[handler|
-  ForwardState0 h s a :: s -> WrappedErrComp h a
-    handles {Get s, Put s, Err} where
-      Return  x     _ -> Wrap (return x)
-      Get        k  s -> k s  s
-      Put     s  k  _ -> k () s
-      Err     m  k  s -> Wrap (do {x <- err m; unWrap (k x s)})
-|]
+-- newtype WrappedComp h c a = Wrap {unWrap :: c => Comp h a}
+-- type WrappedErrComp h a = WrappedComp h [handles|h {Err}|] a
+-- [handler|
+--   ForwardState0 h s a :: s -> WrappedErrComp h a
+--     handles {Get s, Put s, Err} where
+--       Return  x     _ -> Wrap (return x)
+--       Get        k  s -> k s  s
+--       Put     s  k  _ -> k () s
+--       Err     m  k  s -> Wrap (do {x <- err m; unWrap (k x s)})
+-- |]
 
 [handler|
   forward h.ForwardState s a :: s -> a 
@@ -152,7 +154,7 @@ type SComp' h s a =
 
 stateErr s = reportErr . forwardState s
 
-type SEComp s a =
+type SEComp s a = forall h.
   ([handles|h {Get s}|], [handles|h {Put s}|], [handles|h {Err}|]) =>
        Comp h a
 
@@ -202,5 +204,5 @@ forward n = printHandler (forwardState n count)
 iterations = 1000000000
 
 main = defaultMain [
-         bcompare [ bench "simple"  $ whnf simple iterations
-                  , bench "forward" $ whnf forward iterations ]]
+         bgroup "state" [ bench "simple"  $ whnf simple iterations
+                        , bench "forward" $ whnf forward iterations ]]

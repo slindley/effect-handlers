@@ -80,7 +80,7 @@
       clause op k h = doOp op >>= (\x -> k x h)
 
   IMPORTANT: the kind annotations are critical if PolyKinds is
-  switched on. Without them type inference can't ope with the forwarding
+  switched on. Without them type inference can't cope with the forwarding
   clause.
 
   A polymorphic operation:
@@ -131,8 +131,8 @@ import ParseHandlers(parseOpDef,
 import Language.Haskell.TH
 import Language.Haskell.TH.Quote
 
-import qualified Language.Haskell.Exts.Parser as Exts
-import Language.Haskell.Exts.Extension
+import qualified Language.Haskell.Exts.Parser as Parser
+import Language.Haskell.Exts.Extension as E
 
 --import Language.Haskell.SyntaxTrees.ExtsToTH
 import qualified Language.Haskell.Meta.Parse as MetaParse
@@ -204,7 +204,8 @@ makeHandlerDef shallow (h, name, ts, sig, r, cs) =
         handlerType =
           DataD [] cname
                     (map (\tv -> KindedTV tv StarT) tyvars)
-                    [NormalC cname (map (\arg -> (IsStrict, arg)) args)]
+                    Nothing
+                    [NormalC cname (map (\arg -> (Bang NoSourceUnpackedness SourceStrict, arg)) args)]
                     []
         {- NOTE: minor change in API for Template Haskell 2.9.0.
            TySynInstD now takes two arguments, the second of which
@@ -243,10 +244,9 @@ makeHandlerDef shallow (h, name, ts, sig, r, cs) =
         
         makeParentPredicate (opName, tys) =
             let opArgTypes = makeArgType tys in
-            ClassP plainHandles [VarT (head tyvars),
-                                 ConT (mkName opName),
-                                 opArgTypes]
-
+            appType (ConT plainHandles) [VarT (head tyvars),
+                                         ConT (mkName opName),
+                                         opArgTypes]
         -- type class constraints representing operations handled
         -- by the parent handler
         parentCtx = map makeParentPredicate parentSig
@@ -296,7 +296,7 @@ makeHandlerDef shallow (h, name, ts, sig, r, cs) =
                     opArgs          = reverse (drop (length args + 1) (reverse ps))
             
             decs <- makeClauseDecs (filter (matchOp (== opName)) opCases)          
-            return (InstanceD (parentCtx ++ rawCtx) handles decs)
+            return (InstanceD Nothing (parentCtx ++ rawCtx) handles decs)
             
         retDec = FunD (mkName "ret") (map makeClause retCases)
           where
@@ -308,10 +308,10 @@ makeHandlerDef shallow (h, name, ts, sig, r, cs) =
                   ps = [v,ConP cname hs]
         
         forwardInstance handles extra decs =
-          InstanceD pre (ConT handles `appType` ([happ, op] ++ extra)) decs
+          InstanceD Nothing pre (ConT handles `appType` ([happ, op] ++ extra)) decs
             where
               op  = VarT (mkName "op")
-              pre = [ClassP handles ([VarT (head tyvars), op] ++ extra)]
+              pre = [appType (ConT handles) ([VarT (head tyvars), op] ++ extra)]
         
         ds = parseDecs cs
     opClauses <- mapM clauseInstance sig
@@ -411,12 +411,12 @@ makeOpDefs (us, name, ts, sig) =
             n = length xs
         (ekind, eimp) = kindAndType existsVars
         (ukind, uimp) = kindAndType forallVars
-    
         opType =          
           DataD [] cname
             [KindedTV evar ekind, KindedTV uvar ukind]
-            [ForallC (map PlainTV tyvars) [EqualP (VarT evar) eimp, EqualP (VarT uvar) uimp]
-             (NormalC cname (map (\arg -> (IsStrict, arg)) args))]            
+            Nothing
+            [ForallC (map PlainTV tyvars) [appType EqualityT [VarT evar, eimp], appType EqualityT [VarT uvar, uimp]]
+             (NormalC cname (map (\arg -> (Bang NoSourceUnpackedness SourceStrict, arg)) args))]            
             []
         returnInstance =
           TySynInstD (mkName "Return")
@@ -431,7 +431,7 @@ makeOpDefs (us, name, ts, sig) =
         return (SigD fname
                 (ForallT
                  (PlainTV h:map PlainTV tyvars)
-                 [ClassP (mkName "Handles") [VarT h, ConT cname, eimp]]
+                 [appType (ConT (mkName "Handles")) [VarT h, ConT cname, eimp]]
                  (makeFunType h args)))
           
     let opFun = FunD fname
@@ -460,26 +460,28 @@ makeOpDefs (us, name, ts, sig) =
 
 parseType :: String -> Type
 parseType s =
-  toType (Exts.fromParseResult
-          (Exts.parseTypeWithMode
-           (Exts.ParseMode "" Haskell2010
+  toType (Parser.fromParseResult
+          (Parser.parseTypeWithMode
+           (Parser.ParseMode "" Haskell2010
             (map EnableExtension
-             [GADTs,
-              TypeFamilies, RankNTypes, FunctionalDependencies,
-              ScopedTypeVariables,
-              MultiParamTypeClasses, FlexibleInstances, FlexibleContexts,
-              TypeOperators]) True True Nothing)
+               [E.GADTs,
+                E.TypeFamilies, E.RankNTypes, E.FunctionalDependencies,
+                E.ScopedTypeVariables,
+                E.MultiParamTypeClasses, E.FlexibleInstances, E.FlexibleContexts,
+                E.TypeOperators]
+              ) True True Nothing True)
            s))
 
 parseDecs :: String -> [Dec]
 parseDecs s =
-  toDecs (Exts.fromParseResult
-          (Exts.parseDeclWithMode
-           (Exts.ParseMode "" Haskell2010
+  toDecs (Parser.fromParseResult
+          (Parser.parseDeclWithMode
+           (Parser.ParseMode "" Haskell2010
             (map EnableExtension
-             [GADTs,
-              MultiParamTypeClasses, FlexibleInstances, FlexibleContexts,
-              TypeOperators]) True True Nothing)
+               [E.GADTs,
+                E.MultiParamTypeClasses, E.FlexibleInstances, E.FlexibleContexts,
+                E.TypeOperators]
+              ) True True Nothing True)
            s))
 
 parseExp :: String -> Exp

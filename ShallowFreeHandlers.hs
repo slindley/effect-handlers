@@ -21,7 +21,9 @@ instance Monad (Comp h) where
   return        = Ret
   Ret v   >>= f = f v
   Do op k >>= f = Do op (\x -> k x >>= f)
-
+instance Applicative (Comp h) where
+  pure    = return
+  f <*> a = do {f' <- f; a' <- a; return (f' a')}
 instance Functor (Comp h) where
   fmap f c = c >>= \x -> return (f x)
 

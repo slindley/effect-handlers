@@ -7,7 +7,6 @@
   #-}
 
 import Criterion.Main
-import Criterion.Config
 
 import Control.Monad
 import Control.Applicative
@@ -96,15 +95,15 @@ queensComp n = foldM f [] [1..n] where
                     else failed
 
 --size = 22
-  
+
 pureTest    n = head (queensPure n)
 maybeTest   n = fromJust (handlePure (maybeResults (queensComp n)))
 successTest n = fromJust (handlePure (maybeSuccess (successFailure (queensComp n))))
 firstTest   n = undefinedFailure (firstResult (queensComp n))
 
-group n = bcompare [ bench "pure"     $ whnf pureTest    n 
-                   , bench "handlers" $ whnf maybeTest   n 
-                   , bench "success"  $ whnf successTest n
-                   , bench "first"    $ whnf firstTest   n ]
+group n = bgroup "nqueens" [ bench "pure"     $ whnf pureTest    n
+                           , bench "handlers" $ whnf maybeTest   n
+                           , bench "success"  $ whnf successTest n
+                           , bench "first"    $ whnf firstTest   n ]
 
 main = do defaultMain [ group n | n <- [16..20] ]

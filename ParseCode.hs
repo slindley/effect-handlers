@@ -1,3 +1,5 @@
+{-# LANGUAGE FlexibleContexts #-}
+
 module ParseCode (top, paren) where
 
 import Text.ParserCombinators.Parsec

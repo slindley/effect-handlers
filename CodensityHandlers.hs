@@ -24,10 +24,18 @@ instance Monad (RawComp h) where
   return        = Ret
   Ret v   >>= f = f v
   Do op k >>= f = Do op (\x -> k x >>= f)
+instance Applicative (RawComp h) where
+  pure    = return
+  f <*> a = do {f' <- f; a' <- a; return (f' a')}
+instance Functor (RawComp h) where
+  fmap f c = c >>= \x -> return (f x)
 
 instance Monad (Comp c) where
   return v     = Comp (\k -> k v)
   Comp c >>= f = Comp (\k -> c (\x -> unComp (f x) k))
+instance Applicative (Comp h) where
+  pure    = return
+  f <*> a = do {f' <- f; a' <- a; return (f' a')}
 instance Functor (Comp h) where
   fmap f c = c >>= \x -> return (f x)
 

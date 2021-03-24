@@ -9,7 +9,7 @@ import Control.Monad.Identity
 import Control.Monad
 import Control.Monad.Trans
 
-import Control.Pipe
+import Pipes
 
 fromList :: Monad m => [a] -> Producer a m ()
 fromList = mapM_ yield
@@ -37,7 +37,7 @@ printer =
     lift (print x)
 
 --pipeline :: Pipe () C IO ()
-pipeline = printer <+< take' 3 <+< fromList [1..]
+pipeline = printer <-< take' 3 <-< fromList [1..]
 
 produceFrom :: (Monad m) => Int -> Producer Int m a
 produceFrom i =
@@ -88,25 +88,25 @@ sumTo = sumTo' 0
 
 expoPipe :: Monad m => Int -> Pipe Int Int m a
 expoPipe 0 = forever $ do {x <- await; yield $! x+1}
-expoPipe n = expoPipe (n-1) <+< expoPipe (n-1)
+expoPipe n = expoPipe (n-1) <-< expoPipe (n-1)
 
 blackhole :: Monad m => Consumer a m b
 blackhole = forever await
 
-test0 n = blackhole <+< produceFromTo 1 n
-test1 = printer <+< sumTo 100000000 <+< count <+< produceFrom 0
-test2 = printer <+< sumTo 100000000 <+< count <+< count <+< produceFrom 0
-test3 = printer <+< sumTo 100000000 <+< count <+< count <+< count <+< produceFrom 0
-test4 = printer <+< sumTo 1000000000 <+< logger <+< produceFrom 0
-test5 = printer <+< take' 100 <+< expoPipe 10 <+< produceFrom 0
-test6 n = blackhole <+< take' 1000 <+< expoPipe n <+< produceFrom 0
-test7 n = blackhole <+< takePure 1000 <+< expoPipe n <+< produceFrom 0
+test0 n = blackhole <-< produceFromTo 1 n
+test1 = printer <-< sumTo 100000000 <-< count <-< produceFrom 0
+test2 = printer <-< sumTo 100000000 <-< count <-< count <-< produceFrom 0
+test3 = printer <-< sumTo 100000000 <-< count <-< count <-< count <-< produceFrom 0
+test4 = printer <-< sumTo 1000000000 <-< logger <-< produceFrom 0
+test5 = printer <-< take' 100 <-< expoPipe 10 <-< produceFrom 0
+test6 n = blackhole <-< take' 1000 <-< expoPipe n <-< produceFrom 0
+test7 n = blackhole <-< takePure 1000 <-< expoPipe n <-< produceFrom 0
 
 main :: IO ()
-main = runPipe (test0 (10^8))
+main = runEffect (test0 (10^8))
 
 simple :: Int -> Identity ()
-simple n = runPipe (test0 n)
+simple n = runEffect (test0 n)
 
 nested :: Int -> Identity ()
-nested n = runPipe (test7 n)
+nested n = runEffect (test7 n)

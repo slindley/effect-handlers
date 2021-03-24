@@ -1,5 +1,4 @@
 import Criterion.Main
-import Criterion.Config
 
 import qualified Examples.PlainState as P
 import qualified Examples.State as H
@@ -9,8 +8,8 @@ import qualified Examples.FreeState as F
 
 iterExp = 6
 
-pure    n = bench "pure"    $ whnf P.pure    n
-monadic n = bench "monadic" $ whnf P.monadic n 
+pure'   n = bench "pure"    $ whnf P.pure'   n
+monadic n = bench "monadic" $ whnf P.monadic n
 
 cont n = bgroup "cont"
          [ bench "simple"  $ whnf H.simple  n
@@ -25,7 +24,7 @@ shallow n = bgroup "shallow"
             [ bench "simple"  $ whnf    S.simple  n
             , bench "forward" $ whnfIO (S.forward n) ]
 
-comp n = [bcompare [pure n, monadic n, cont n, free n, codensity n, shallow n]]
+comp n = [bgroup "state" [pure' n, monadic n, cont n, free n, codensity n, shallow n]]
 
 main = defaultMain [ bgroup ("10^" ++ (show m)) (comp (10^m))
                    | m <- [iterExp..iterExp+2] ]

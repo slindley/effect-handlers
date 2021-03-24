@@ -3,7 +3,7 @@ module Examples.PlainState where
 import Control.Monad.State
 
 import Criterion.Main
-import Criterion.Config
+--import Criterion.Config
 
 countPure :: Int -> Int
 countPure n = if n == 0 then n
@@ -18,8 +18,8 @@ count =
 iterations = 1000000000
 
 monadic = runState count
-pure    = countPure
+pure'   = countPure
 
 main = defaultMain [
        bgroup "state" [ bench "monadic" $ whnf monadic iterations
-                      , bench "pure"    $ whnf pure    iterations ]]
+                      , bench "pure"    $ whnf pure'   iterations ]]

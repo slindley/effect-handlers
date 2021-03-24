@@ -16,7 +16,7 @@ import DesugarHandlers
 [operation|Get s :: s|]
 [operation|Put s :: s -> ()|]
 
-type SComp s a =
+type SComp s a = forall h.
   ([handles|h {Get s}|], [handles|h {Put s}|]) => Comp h a
 
 [handler|
